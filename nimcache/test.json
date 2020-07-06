@@ -1,0 +1,9 @@
+{"compile":[
+["/mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/test.c", "gcc -c  -w  -I/usr/lib/nim -o /mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/test.o /mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/test.c"],
+],
+"link":[
+"/mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/test.o",
+"/mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/stdlib_system.o"
+],
+"linkcmd": "gcc   -o /mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/test  /mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/test.o /mnt/c/Users/Alphatron1999/Desktop/Compiler/MiniNim/nimcache/stdlib_system.o    -ldl"
+}

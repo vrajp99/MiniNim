@@ -1,0 +1,132 @@
+letter ::= 'A'..'Z' | 'a'..'z'
+digit ::= '0'..'9' 
+IDENT ::= letter ( ['_'] (letter | digit) )*
+
+STR_LIT ::= '"' .* '"'
+CHAR_LIT ::= '''.'''
+DEC_LIT = digit ( ['_'] digit )*
+exponent = ('e' | 'E' ) ['+' | '-'] digit ( ['_'] digit )*
+FLOAT_LIT = digit (['_'] digit)* (('.' digit (['_'] digit)* [exponent]) |exponent)
+UINT_LIT = INT_LIT ['\''] ('u' | 'U')
+
+KEYW =  addr and as block break cast const continue
+elif else end enum for
+if in is isnot let mod nil not notin
+object of or proc return
+tuple type using var when while xor
+
+Operator Precedence: https://nim-lang.org/docs/manual.html#syntax-precedence
+
+module = stmt ^* (';' / IND{=})
+comma = ',' COMMENT?
+semicolon = ';' COMMENT?
+colon = ':' COMMENT?
+colcom = ':' COMMENT?
+operator =  OP0 | OP1 | OP2 | OP3 | OP4 | OP5 | OP6 | OP7 | OP8 | OP9
+         | 'or' | 'xor' | 'and'
+         | 'is' | 'isnot' | 'in' | 'notin' | 'of'
+         | 'div' | 'mod' | 'shl' | 'shr' | 'not' | '..'
+prefixOperator = operator
+optInd = COMMENT? IND?
+optPar = (IND{>} | IND{=})?
+simpleExpr = assignExpr (OP1 optInd assignExpr)*
+assignExpr = orExpr (OP2 optInd orExpr)*
+orExpr = andExpr (OP3 optInd andExpr)*
+andExpr = cmpExpr (OP4 optInd cmpExpr)*
+cmpExpr = sliceExpr (OP5 optInd sliceExpr)*
+sliceExpr = ampExpr (OP6 optInd ampExpr)*
+ampExpr = plusExpr (OP7 optInd plusExpr)*
+plusExpr = mulExpr (OP8 optInd mulExpr)*
+mulExpr = dollarExpr (OP9 optInd dollarExpr)*
+dollarExpr = primary (OP10 optInd primary)*
+symbol = IDENT | KEYW
+exprColonEqExpr = expr (':'|'=' expr)?
+exprList = expr ^+ comma
+exprColonEqExprList = exprColonEqExpr (comma exprColonEqExpr)* (comma)?
+dotExpr = expr '.' optInd symbol
+qualifiedIdent = symbol ('.' optInd symbol)?
+castExpr = 'cast' '[' optInd typeDesc optPar ']' '(' optInd expr optPar ')'
+parKeyw = 'if' | 'while' | 'for' | 'block' | 'let'| 'var'
+par = '(' optInd
+          ( &parKeyw complexOrSimpleStmt ^+ ';'
+          | ';' complexOrSimpleStmt ^+ ';'
+          | simpleExpr ( ('=' expr (';' complexOrSimpleStmt ^+ ';' )? )
+                       | (':' expr (',' exprColonEqExpr     ^+ ',' )? ) ) )
+          optPar ')'
+literal = 'true' | 'false' | INT_LIT | UINT_LIT | FLOAT_LIT | STR_LIT | CHAR_LIT | NIL
+identOrLiteral = symbol | literal
+               | par | arrayConstr | castExpr
+tupleConstr = '(' optInd (exprColonEqExpr comma?)* optPar ')'
+arrayConstr = '[' optInd (exprColonEqExpr comma?)* optPar ']'
+primarySuffix = '(' (exprColonEqExpr comma?)* ')'
+      | '[' optInd exprColonEqExprList optPar ']'
+      | '{' optInd exprColonEqExprList optPar '}'
+      | &( '`'|IDENT|literal|'cast'|'addr'|'type') expr # command syntax
+condExpr = expr colcom expr optInd
+        ('elif' expr colcom expr optInd)*
+         'else' colcom expr
+ifExpr = 'if' condExpr
+identVis = symbol OPR?  # postfix position
+identVisDot = symbol '.' optInd symbol OPR?
+identWithPragma = identVis
+identWithPragmaDot = identVisDot
+declColonEquals = identWithPragma (comma identWithPragma)* comma?
+                  (':' optInd typeDesc)? ('=' optInd expr)?
+identColonEquals = IDENT (comma IDENT)* comma?
+     (':' optInd typeDesc)? ('=' optInd expr)?)
+inlTupleDecl = 'tuple'
+    '[' optInd  (identColonEquals (comma/semicolon)?)*  optPar ']'
+extTupleDecl = 'tuple'
+    COMMENT? (IND{>} identColonEquals (IND{=} identColonEquals)*)?
+tupleClass = 'tuple'
+paramList = '(' declColonEquals ^* (comma/semicolon) ')'
+paramListColon = paramList? (':' optInd typeDesc)?
+procExpr = 'proc' paramListColon ('=' COMMENT? stmt)?
+forStmt = 'for' (identWithPragma ^+ comma) 'in' expr colcom stmt
+forExpr = forStmt
+expr = (blockExpr
+      | ifExpr
+      | forExpr)
+      / simpleExpr
+typeKeyw = 'var' | 'ptr' | 'tuple' | 'proc' | 'enum'
+primary = typeKeyw optInd typeDesc
+        /  prefixOperator* identOrLiteral primarySuffix*
+typeDesc = simpleExpr ('not' expr)?
+postExprBlocks = ':' stmt? ( IND{=} 'elif' expr ':' stmt
+                           | IND{=} 'else' ':' stmt )*
+exprStmt = simpleExpr
+         (( '=' optInd expr colonBody? )
+         / ( expr ^+ comma
+             postExprBlocks
+           ))?
+returnStmt = 'return' optInd expr?
+breakStmt = 'break' optInd expr?
+continueStmt = 'continue' optInd expr?
+condStmt = expr colcom stmt COMMENT?
+           (IND{=} 'elif' expr colcom stmt)*
+           (IND{=} 'else' colcom stmt)?
+ifStmt = 'if' condStmt
+whileStmt = 'while' expr colcom stmt
+blockStmt = 'block' symbol? colcom stmt
+blockExpr = 'block' symbol? colcom stmt
+indAndComment = (IND{>} COMMENT)? | COMMENT?
+routine = optInd identVis
+  paramListColon ('=' COMMENT? stmt)? indAndComment
+commentStmt = COMMENT
+section(RULE) = COMMENT? RULE / (IND{>} (RULE / COMMENT)^+IND{=} DED)
+enum = 'enum' optInd (symbol optInd ('=' optInd expr COMMENT?)? comma?)+
+typeDef = identWithPragmaDot '=' optInd typeDesc
+            indAndComment?
+varTuple = '(' optInd identWithPragma ^+ comma optPar ')' '=' optInd expr
+colonBody = colcom stmt postExprBlocks?
+variable = (varTuple / identColonEquals) colonBody? indAndComment
+simpleStmt = ((returnStmt | breakStmt
+           | continueStmt | commentStmt) 
+           / exprStmt) COMMENT?
+complexOrSimpleStmt = (ifStmt | whileStmt | forStmt
+                    | blockStmt | 'proc' routine
+                    | 'type' section(typeDef)
+                    | ('let' | 'var') section(variable))
+                    / simpleStmt
+stmt = (IND{>} complexOrSimpleStmt^+(IND{=} / ';') DED)
+     / simpleStmt ^+ ';'
