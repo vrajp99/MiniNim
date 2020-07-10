@@ -1,9 +1,10 @@
 %{
-#include "symrec.h"
 #include "nim.tab.h"
+#include "symrec.h"
 #include "stack.h"
 #include <string.h>
 
+symrec *sym_table = (symrec *)0;
 node *indent_stack = NULL;
 
 int g_current_line_indent = 0;   /* indentation of the current line */
@@ -56,23 +57,12 @@ BOOLLIT true|false
     int indent_caller = normal;
 
 
-<*>\n { set_yycolumn(0); yylineno--; 
-      // printf("REJECT\n"); 
-      REJECT; }
-<initial>.  { set_yycolumn(yycolumn-1); indent_caller = normal; yyless(0); 
-            //  printf("initial .\n");
-             BEGIN(indent); }
-<initial>\n { indent_caller = normal; yyless(0); BEGIN(indent);
-            //   printf("initial \\n"); 
-            }
-<indent>" "     { g_current_line_indent++; 
-                // printf("Indent space\n");
-                }
-<indent>\n      { g_current_line_indent = 0; 
-                // printf("Indent \\n\n");
-                /* ignoring blank line */ }
-<indent><<EOF>> {   
-                    // printf("\nEOF");
+<*>\n { set_yycolumn(0); yylineno--; printf("REJECT"); REJECT; }
+<initial>.  { set_yycolumn(yycolumn-1); indent_caller = normal; yyless(0); printf("initial .");BEGIN(indent); }
+<initial>\n { indent_caller = normal; yyless(0); BEGIN(indent);printf("initial \\n"); }
+<indent>" "     { g_current_line_indent++; printf("Indent space");}
+<indent>\n      { g_current_line_indent = 0; printf("Indent \\n");/* ignoring blank line */ }
+<indent><<EOF>> {   printf("EOF");
                     // When encountering the end of file, we want to emit an
                     // outdent for all indents currently left.
                     if(indent_stack->value != 0) {
@@ -87,14 +77,14 @@ BOOLLIT true|false
                         } else {
                             BEGIN(indent_caller);
                         }
+
                         return DED;
                     } else {
                         yyterminate();
                     }
                 }
 
-<indent>.       {   
-                    // printf("Indenter Entry\n");
+<indent>.       {   printf("Indent .\n");
                     if(!g_is_fake_outdent_symbol) {
                         unput(*yytext);
                     }
@@ -103,7 +93,7 @@ BOOLLIT true|false
                     if(g_current_line_indent > indent_stack->value) {
                         push(&indent_stack,g_current_line_indent);
                         BEGIN(indent_caller);
-                        printf("INDG\n");
+                        printf("INDG");
                         return INDG;
                     } else if (g_current_line_indent == indent_stack->value) {
                         BEGIN(indent_caller);
@@ -117,35 +107,27 @@ BOOLLIT true|false
                     } else if(g_current_line_indent < indent_stack->value) {
                         pop(&indent_stack);
                         if(g_current_line_indent != indent_stack->value) {
-                            // printf("This IF\n");
                             for(size_t i = 0 ; i < g_current_line_indent ; ++i) {
                                 unput(' ');
                             }
                             unput('\n');
                             unput('.');
                             g_is_fake_outdent_symbol = 1;
-                            // for(size_t i = 0 ; i < indent_stack->value ; ++i) {
-                            //     unput(' ');
-                            // }
-                            // unput('\n');
+                            for(size_t i = 0 ; i < indent_stack->value ; ++i) {
+                                unput(' ');
+                            }
+                            unput('\n');
                         } else {
-                            // printf("That IF\n");
-                            // BEGIN(indent_caller);
+                            BEGIN(indent_caller);
                         }
-                        printf("DED\n");
+                        printf("DED");
                         return DED;
                     } else {
                         BEGIN(indent_caller);
                     }
                 }
 
-<normal>\n    {
-                // printf("NORMAL \n"); 
-                g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
-
-<normal><<EOF>> {
-                // printf("NORMAL \n"); 
-                g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
+<normal>\n    {printf("NORMAL \n"); g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
 <normal>{OP}        {printf("OP\n");if(strcmp("$",yytext)==0){return '$';}
                      else if(strcmp("*",yytext)==0){return '*';}
@@ -191,11 +173,11 @@ BOOLLIT true|false
 
 <normal>{FLOATLIT}    {sscanf(yytext,"%lf",&yylval.floater);printf("Float\n");return FLOATLIT;}
 
-<normal>{STRLIT}      {yylval.str = strdup(yytext);printf("String\n");return STRLIT;}
+<normal>{STRLIT}      {sscanf(yytext,"%s",yylval.str);printf("String\n");return STRLIT;}
 
 <normal>{BOOLLIT}     {if (yytext[0]=='t') {yylval.integer = 1;} else {yylval.integer = 0;} printf("Bool\n");return BOOLLIT;}
 
-<normal>{IDENT}       {yylval.str = strdup(yytext);printf("IDENT\n");return IDENT;}
+<normal>{IDENT}       {sscanf(yytext,"%s",yylval.str);printf("IDENT\n");return IDENT;}
 
 <normal>[ ]+          /* eat up whitespace */
 
@@ -212,23 +194,23 @@ BOOLLIT true|false
 
 /* The symbol table: a chain of `struct symrec'.  */
 
-// symrec * putsym (char *sym_name,int sym_type){
-//   symrec *ptr;
-//   ptr = (symrec *) malloc (sizeof (symrec));
-//   ptr->name = (char *) malloc (strlen (sym_name) + 1);
-//   strcpy (ptr->name,sym_name);
-//   ptr->type = sym_type;
-//   ptr->value.var = 0; /* set value to 0 even if fctn.  */
-//   ptr->next = (struct symrec *)sym_table;
-//   sym_table = ptr;
-//   return ptr;
-// }
+symrec * putsym (char *sym_name,int sym_type){
+  symrec *ptr;
+  ptr = (symrec *) malloc (sizeof (symrec));
+  ptr->name = (char *) malloc (strlen (sym_name) + 1);
+  strcpy (ptr->name,sym_name);
+  ptr->type = sym_type;
+  ptr->value.var = 0; /* set value to 0 even if fctn.  */
+  ptr->next = (struct symrec *)sym_table;
+  sym_table = ptr;
+  return ptr;
+}
 
-// symrec *getsym (char *sym_name){
-//   symrec *ptr;
-//   for (ptr = sym_table; ptr != (symrec *) 0;
-//        ptr = (symrec *)ptr->next)
-//     if (strcmp (ptr->name,sym_name) == 0)
-//       return ptr;
-//   return 0;
-// }
+symrec *getsym (char *sym_name){
+  symrec *ptr;
+  for (ptr = sym_table; ptr != (symrec *) 0;
+       ptr = (symrec *)ptr->next)
+    if (strcmp (ptr->name,sym_name) == 0)
+      return ptr;
+  return 0;
+}

@@ -4,6 +4,7 @@ block outout:
     type k = enum appc bccc ccccc
     var (c,d) = (0,1)
     (d,c) = (1,0)
+    var b = 1 div 2
     var ax = if 1==2 : 1
      else: 2 
     echo(1 and not 1)

@@ -1,0 +1,62 @@
+temp0 = 2
+a = temp0
+label11:
+temp1 = a
+temp2 = 2
+if temp1 eq temp2 goto _bp0
+goto _bp1
+label0:
+temp3 = a
+temp4 = 3
+if temp3 leq temp4 goto _bp2
+goto _bp3
+label9:
+label6:
+temp5 = a
+temp6 = 2
+if temp5 eq temp6 goto _bp4
+goto _bp5
+label1:
+temp7 = a
+temp8 = 3
+if temp7 leq temp8 goto _bp6
+goto _bp7
+label4:
+label2:
+temp9 = 10
+a = temp9
+goto _bp8
+label5:
+label3:
+temp10 = 2
+temp11 = 2
+temp12 = temp10 + temp11
+a = temp12
+label7:
+temp13 = 100
+a = temp13
+goto _bp9
+label10:
+label8:
+temp14 = 2
+temp15 = 2
+temp16 = temp14 + temp15
+a = temp16
+label12:
+temp17 = 100
+a = temp17
+label13:
+IR_END
+
+PATCH_LABELS
+
+_bp8 label7
+_bp9 label12
+_bp0 label0
+_bp4 label1
+_bp6 label4
+_bp2 label9
+_bp5 label5
+_bp7 label5
+_bp1 label10
+_bp3 label10

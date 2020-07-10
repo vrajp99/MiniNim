@@ -6,10 +6,63 @@ Reference: http://dinosaur.compilertools.net/bison/bison_5.html
 #include<stdio.h>
 #include<string.h>
 #include<stdlib.h> 
-#include <math.h> 
-#include "symrec.h"  /* Contains definition of `symrec'        */
+#include <stdarg.h>
+#include <math.h>
+#include "backpatch.h"
+#include "symrec.h"  /* Contains definition of `symrec" */
 int  yylex(void);
 void yyerror (char  *); 
+FILE *yyin;
+int curr_scope = 0;
+symrec *sym_table = (symrec *)0;
+char* new_label();
+char* new_temp();
+char* new_bplabel();
+char* sc(char * s1, char *s2);
+char* scc(int num,...);
+void dump_IR(char *);
+char boolean[2][10] = {"false","true"};
+char* putl(char * s){
+    return sc(s,":\n");
+}
+bp_node *create_bp(char * temp_label) {
+    bp_node *v = (bp_node *) malloc(sizeof(bp_node));
+    v->temp_label = temp_label;
+    v->bp_label = NULL;
+    v->prev = NULL;
+    return v;
+}
+
+bp_node *merge(bp_node *l1, bp_node *l2){
+    if (l1==NULL) return l2;
+    if (l2==NULL) return l1;
+    bp_node *temp = l1;
+    while (temp->prev != NULL) temp = temp->prev;
+    temp->prev = l2;
+    return l1;    
+}
+
+void backpatch(bp_node *l, char *bp_label){
+    if (l==NULL) return;
+    l->bp_label = bp_label;
+    backpatch(l->prev, bp_label);
+}
+
+void print_list(bp_node* l){
+    if (l==0) return;
+    if (l->bp_label == NULL){
+        printf("Internal Warning: Null Label Found for backpatch label: %s", l->temp_label);
+    } else {
+        printf("%s   %s\n", l->temp_label, l->bp_label);
+        print_list(l->prev);
+    }
+}
+
+
+bp_node* globaltruelist = NULL;
+bp_node* globalfalselist = NULL;
+bp_node* globalnextlist = NULL;
+char * final_IR;
 %}
 
 %union {
@@ -17,7 +70,9 @@ int integer;
 double floater;  /* For returning numbers.                   */
 char *str;
 char ch;
-struct symrec  *tptr;   /* For returning symbol-table pointers      */
+idorlit idl;
+// symrec  *tptr;   /* For returning symbol-table pointers      */
+sdd s_tree;
 }
 
 %token <integer> INTLIT
@@ -30,108 +85,309 @@ struct symrec  *tptr;   /* For returning symbol-table pointers      */
 %token <str> INDEQ
 %token <str> DED
 
+%token BREAK "break"
+%token CONTINUE "continue"
+%token ELIF "elif"
+%token ELSE "else"
+%token FOR "for"
+%token IF "if"
+%token IN "in"
+%token NIL "nil"
+%token PROC "proc"
+%token RETURN "return"
+%token TUPLE "tuple"
+%token TYPE "type"
+%token VAR "var"
+%token WHILE "while"
+
 %nonassoc IFX
+%nonassoc ELSEX
 %nonassoc INDEQ
 
 // %type  <int> exp
 
-%left "xor"
-%left "or" 
-%left "and"
-%left "!=" 
-%left ">" 
-%left ">=" 
-%left "<" 
-%left "<=" 
-%left "==" 
-%left ".." 
-%left "-" 
-%left "+" 
-%left "%" 
-%left "mod"
-%left "div"
-%left "/" 
-%left "*" 
-%right "$"
-%right "not"
+%token XOR "xor"
+%token OR "or" 
+%token AND "and"
+%token NE "!=" 
+%token GE ">=" 
+%token LE "<=" 
+%token EQ "==" 
+%token SLICE ".." 
+%token MOD "mod"
+%token DIV "div"
+%token NOT "not"
+%token PEQ "+="
+%token MEQ "*="
+
+%left XOR 
+%left OR 
+%left AND 
+%left NE 
+%left '>' 
+%left GE 
+%left '<' 
+%left LE 
+%left EQ 
+%left SLICE
+%left '-'
+%left '+' 
+%left '%' 
+%left MOD
+%left DIV 
+%left '/' 
+%left '*' 
+%right '$'
+%right NOT
 %right UPLUS
 %right UMINUS
 %nonassoc LPAREN
-
 %locations
+%debug
+// Non-Terminals Types
+
+%type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt
+%type <idl> symbol literal identOrLiteral
 
 /* Grammar follows */
 
 %%
 
-module: complexOrSimpleStmt
-        | complexOrSimpleStmt module2 
-        | 
+module: complexOrSimpleStmt {   
+                                char* label = new_label();
+                                backpatch($1.nextlist, label);
+                                globalnextlist = merge(globalnextlist, $1.nextlist);
+                                $$.code = scc(2, $1.code,putl(label));
+                                final_IR = $$.code;
+                            }
+        | module2 INDEQ complexOrSimpleStmt {
+                                        char *label1 = new_label();
+                                        char *label2 = new_label();
+                                        backpatch($1.nextlist, label1);
+                                        backpatch($3.nextlist, label2);
+                                        globalnextlist = merge(globalnextlist, $1.nextlist);
+                                        globalnextlist = merge(globalnextlist, $3.nextlist);
+                                        $$.code = scc(4, $1.code, putl(label1), $3.code, putl(label2)); 
+                                        final_IR = $$.code;
+                                      }
+        | {$$.code = ""; final_IR = $$.code;}
 ;
-module2: INDEQ complexOrSimpleStmt module2 
-        | INDEQ complexOrSimpleStmt
+module2: module2 INDEQ complexOrSimpleStmt {
+                                            char* label = new_label();
+                                            backpatch($1.nextlist, label);
+                                            globalnextlist = merge(globalnextlist, $1.nextlist);
+                                            $$.nextlist = $3.nextlist;
+                                            $$.code = scc(3, $1.code,putl(label),$3.code);
+                                           }
+        | complexOrSimpleStmt {
+                                $$.nextlist = $1.nextlist;
+                                $$.code = $1.code;
+                              }
 ;
-comma: ","
+comma: ','
 ;
-colon: ":"
+colon: ':'
 ;
-// prefixOperator: "not" 
-//                | "+"
-//                | "-"
-//                | "$"
-// ;
-sExpr: sExpr "xor" sExpr  
-      | sExpr "or" sExpr
-      | sExpr "and" sExpr 
-      | sExpr "!=" sExpr 
-      | sExpr ">" sExpr 
-      | sExpr ">=" sExpr 
-      | sExpr "<" sExpr 
-      | sExpr "<=" sExpr 
-      | sExpr "==" sExpr 
-      | sExpr ".." sExpr 
-      | sExpr "-" sExpr 
-      | sExpr "+" sExpr 
-      | sExpr "%" sExpr 
-      | sExpr "mod" sExpr 
-      | sExpr "div" sExpr 
-      | sExpr "/" sExpr 
-      | sExpr "*" sExpr 
-      | "+" sExpr %prec UPLUS
-      | "-" sExpr %prec UMINUS
-      | "$" sExpr
-      | "not" sExpr
-      | '(' sExpr ')' %prec LPAREN
-      | primary
+sExpr: sExpr "xor" sExpr  {
+                            char *t = new_temp();
+                            char *label = new_label();
+                            char *B1_truelabel = new_label();
+                            char *B1_falselabel = new_label();
+                            char *B2_truelabel = new_label();
+                            char *B2_falselabel = new_label();
+                            char *bptlabel = new_bplabel();
+                            char *bpflabel = new_bplabel();
+                            backpatch($1.falselist,B1_falselabel);
+                            backpatch($1.truelist,B1_truelabel);
+                            backpatch($3.falselist,B2_falselabel);
+                            backpatch($3.truelist,B2_truelabel);
+                            globaltruelist = merge(globaltruelist, $1.truelist);
+                            globaltruelist = merge(globaltruelist, $3.truelist);
+                            globalfalselist = merge(globalfalselist, $1.falselist);
+                            globalfalselist = merge(globalfalselist, $3.falselist);
+                            $$.truelist = create_bp(bptlabel);
+                            $$.falselist = create_bp(bpflabel);
+                            $$.code = scc(31, t, " = 0\n", $1.code, putl(B1_truelabel), t, " = 1\ngoto c", label, "\n", putl(B1_falselabel), t, " = 0\n", putl(label), $3.code, putl(B2_truelabel), "if ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n", putl(B2_falselabel), "ifFalse ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n");
+                          }
+      | sExpr "or" sExpr  {
+                            char *label = new_label();
+                            backpatch($1.falselist,label);
+                            globalfalselist = merge(globalfalselist, $1.falselist);
+                            $$.truelist = merge($1.truelist,$3.truelist);
+                            $$.falselist = $3.falselist;
+                            $$.code = scc(3,$1.code, putl(label), $3.code);
+                          }
+      | sExpr "and" sExpr {
+                            char *label = new_label();
+                            backpatch($1.truelist,label);
+                            globaltruelist = merge(globaltruelist, $1.truelist);
+                            $$.falselist = merge($1.falselist,$3.falselist);
+                            $$.truelist = $3.truelist;
+                            $$.code = scc(3,$1.code, putl(label), $3.code);
+                          }
+      | sExpr "!=" sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " neq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                         }
+      | sExpr '>' sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " gt ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                        }
+      | sExpr ">=" sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " geq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                         }
+      | sExpr '<' sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " lt ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                        }
+      | sExpr "<=" sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " leq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                         }
+      | sExpr "==" sExpr {
+                            char *bplabel1 = new_bplabel();
+                            char *bplabel2 = new_bplabel();
+                            $$.truelist = create_bp(bplabel1);
+                            $$.falselist = create_bp(bplabel2);
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " eq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                         }
+      | sExpr ".." sExpr {}
+      | sExpr '-' sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8 , $1.code, $3.code, $$.addr," = ", $1.addr," - ", $3.addr, "\n");
+                        }
+      | sExpr '+' sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," + ", $3.addr,"\n");
+                        }
+      | sExpr '%' sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," mod ", $3.addr,"\n");
+                        }
+      | sExpr "mod" sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," mod ", $3.addr,"\n");
+                          }
+      | sExpr "div" sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," idiv ", $3.addr,"\n");
+                          }
+      | sExpr '/' sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;
+                            $$.addr = new_temp(); 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," / ", $3.addr,"\n");
+                        }
+      | sExpr '*' sExpr {
+                            $$.truelist = NULL;
+                            $$.falselist = NULL;   
+                            $$.addr = new_temp();
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," * ", $3.addr,"\n");
+                        }
+      | '+' sExpr %prec UPLUS {
+                                $$.truelist = NULL;
+                                $$.falselist = NULL;
+                                $$.code = $2.code;
+                                $$.addr = $2.addr;
+                              }
+      | '-' sExpr %prec UMINUS {
+                                $$.truelist = NULL;
+                                $$.falselist = NULL;
+                                $$.addr = new_temp(); 
+                                $$.code = scc(5, $2.code, $$.addr, " = - ", $2.addr, "\n");
+                               }
+      | '$' sExpr {}
+      | "not" sExpr {
+                        $$.falselist = $$.truelist;
+                        $$.truelist = $$.falselist;
+                        $$.code = $2.code;
+                    }
+      | '(' sExpr ')' %prec LPAREN {
+                                    $$.truelist = $2.truelist;
+                                    $$.falselist = $2.falselist;
+                                    $$.code = $2.code;
+                                    $$.addr = $2.addr;
+                                   }
+      | primary {   
+                    // TODO: Add support for true false
+                    $$.truelist = $1.truelist;
+                    $$.falselist = $1.falselist;
+                    $$.code = $1.code; 
+                    $$.addr = $1.addr;
+                }
 ;
-symbol: IDENT
+symbol: IDENT {
+               $$.value.name = $1;
+               $$.is_ident=1;
+              }
 ;
 
 exprList: expr comma exprList 
-         | expr
+         | expr 
 ;
-literal: BOOLLIT 
-        | INTLIT 
-        | FLOATLIT 
-        | STRLIT 
-        | CHARLIT 
-        | "nil"
+literal: BOOLLIT {$$.value.bval = $1; 
+                  $$.type = BOOL_TYPE;$$.is_ident=0;}
+        | INTLIT {$$.value.ival = $1; 
+                  $$.type = INT_TYPE;$$.is_ident=0;}
+        | FLOATLIT {$$.value.fval = $1; 
+                    $$.type = FLOAT_TYPE;$$.is_ident=0;}
+        | STRLIT {$$.value.sval = $1; 
+                  $$.type = STR_TYPE;$$.is_ident=0;}
+        | CHARLIT {$$.value.cval = $1; 
+                  $$.type = CHAR_TYPE;$$.is_ident=0;}
+        | "nil" {$$.is_ident=0;} 
 ;
-identOrLiteral: symbol 
-               | literal 
+identOrLiteral: symbol {
+                            $$.value.name = $1.value.name; 
+                            $$.is_ident = 1;
+                       }
+               | literal {
+                            if($1.type==INT_TYPE){$$.value.ival=$1.value.ival;} 
+                            else if($1.type==FLOAT_TYPE){$$.value.fval=$1.value.fval;} 
+                            else if($1.type==CHAR_TYPE){$$.value.cval=$1.value.cval;} 
+                            else if($1.type==STR_TYPE){$$.value.sval=$1.value.sval;} 
+                            else if($1.type==INT_TYPE){$$.value.bval=$1.value.bval;} 
+                            $$.type = $1.type; $$.is_ident=0;
+                         }
                | arrayConstr  
-               | tupleConstr
+               | tupleConstr 
 ;
-tupleConstr: "(" exprList ")"
+tupleConstr: '(' exprList ')' 
 ;
-arrayConstr: "[" exprList "]"
+arrayConstr: '[' exprList ']'
 ;
-primarySuffix: "(" exprList ")" 
-              | "("")" 
-              | "["  expr  "]" 
-              | "."  symbol
+primarySuffix: '(' exprList ')'
+              | '('')' 
+              | '['  expr  ']' 
+              | '.'  symbol
 ;
-ifExpr: "if" condExpr
+ifExpr: "if" condExpr 
 ;
 condExpr: expr colon expr elifCondExpr 
 ;
@@ -139,35 +395,69 @@ elifCondExpr: "elif" expr colon expr elifCondExpr
              | "else" colon expr
 ;
 symbolCommaNoHang: symbolCommaNoHang comma symbol 
-                | symbol comma symbol 
+                | symbol comma symbol
 ;
-declColon: symbol ":"  typeDescFunc
+declColon: symbol ':'  typeDesc
 ;
-inlTupleDecl: "tuple" "["   declColonCommaNoHang   "]"
+inlTupleDecl: "tuple" '['   declColonCommaNoHang   ']'
 ;
-arrayDecl: "array" "["  INTLIT comma typeDesc "]"
+arrayDecl: "array" '['  INTLIT comma typeDesc ']'
 ;
-paramList: "(" declColonCommaNoHang ")" 
-          | "(" ")"
+paramList: '(' declColonCommaNoHang ')' 
+          | '(' ')'
 ;
 declColonCommaNoHang: declColon comma declColonCommaNoHang 
                      | declColon 
 ;
-paramListColon: paramList ":"  typeDescFunc 
-               | ":"  typeDesc
+paramListColon: paramList ':'  typeDesc 
+               | ':'  typeDesc
                |
-;
-typeDescFunc: typeDesc 
-             | "var" typeDesc
 ;
 forStmt: "for"  symbolCommaNoHang  "in" expr colonBody
         | "for"  symbol  "in" expr colonBody
 ;
 expr: ifExpr 
-     | sExpr
+     | sExpr {
+                $$.code = $1.code; 
+                $$.addr = $1.addr;
+                $$.truelist = $1.truelist;
+                $$.falselist = $1.falselist;
+             }
 ;
-primary: identOrLiteral primary2
-        | identOrLiteral
+primary: identOrLiteral primary2 
+        | identOrLiteral {
+                            $$.addr = new_temp();
+                            $$.truelist = NULL;
+                            $$.falselist = NULL; 
+                            if($1.is_ident){$$.code = scc(4, $$.addr, " = ", $1.value.name, "\n");} 
+                            else if($1.type==INT_TYPE){
+                                char *int_str = (char *)malloc(50 * sizeof(char));
+                                sprintf(int_str,"%d",$1.value.ival);
+                                $$.code = scc(4, $$.addr, " = ", int_str, "\n");
+                            }
+                            else if($1.type==FLOAT_TYPE){
+                                char *float_str = (char *)malloc(50 * sizeof(char));
+                                sprintf(float_str,"%f",$1.value.fval);
+                                $$.code = scc(4, $$.addr, " = ", float_str,"\n");
+                            }
+                            else if($1.type==STR_TYPE){
+                                $$.code = scc(4, $$.addr, " = ", $1.value.sval, "\n");
+                            }
+                            else if($1.type==CHAR_TYPE){
+                                char *char_str = (char *)malloc(3 * sizeof(char));
+                                sprintf(char_str,"%c",$1.value.cval);
+                                $$.code = scc(4, $$.addr, " = ", char_str, "\n");
+                            }
+                            else if($1.type==BOOL_TYPE){
+                                char* bplabel = new_bplabel();
+                                if ($1.value.bval==1)
+                                    {$$.truelist = create_bp(bplabel);}
+                                else
+                                    {$$.falselist = create_bp(bplabel);}
+                                // $$.code = scc(4, $$.addr, " = ", boolean[$1.value.bval], "\n"));
+                                $$.code = scc(3, "goto ", bplabel, "\n");
+                            }
+                         }
 ;
 primary2: primarySuffix primary2 
          | primarySuffix
@@ -181,13 +471,13 @@ typeDesc: symbol
 //          | inlTupleDecl 
 //          | arrayDecl
 // ;
-exprStmt: sExpr 
-         | symbol "=" expr
-         | symbol "+=" expr
-         | symbol "*=" expr
+exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
+         | symbol '=' expr {$$.code = scc(5, $3.code, $1.value.name, " = ", $3.addr, "\n"); $$.nextlist = NULL;}
+         | symbol "+=" expr {} 
+         | symbol "*=" expr {}
 ;
 // exprStmt: sExpr 
-//          | varTuple "=" expr 
+//          | varTuple '=' expr 
 //          | symbol "+=" expr
 //          | symbol "*=" expr
 // ;
@@ -198,36 +488,55 @@ breakStmt: "break"
 ;
 continueStmt: "continue" 
 ;
-condStmt: expr colonBody elifCondStmt %prec IFX
-         | expr colonBody elifCondStmt INDEQ "else" colonBody 
-         | expr colonBody %prec IFX
-         | expr colonBody INDEQ "else" colonBody
+ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
+         |"if" expr colonBody INDEQ elifCondStmt "else" colonBody {}
+         | "if" expr colonBody %prec IFX {
+                                            char *label = new_label();
+                                            backpatch($2.truelist, label);
+                                            globaltruelist = merge(globaltruelist, $2.truelist);
+                                            $$.nextlist = merge($2.falselist, $3.nextlist);
+                                            $$.code = scc(3, $2.code, putl(label), $3.code);
+                                          }
+         | "if" expr colonBody INDEQ "else" colonBody {
+                                                        char *label1 = new_label();
+                                                        char *label2 = new_label();
+                                                        char *bplabel = new_bplabel();
+                                                        backpatch($2.truelist, label1);
+                                                        backpatch($2.falselist, label2);
+                                                        globalfalselist = merge(globalfalselist, $2.falselist);
+                                                        globaltruelist = merge(globaltruelist, $2.truelist);
+                                                        $$.nextlist = merge(create_bp(bplabel) ,merge($3.nextlist, $6.nextlist));
+                                                        $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $6.code);
+                                                      }
 ;
-elifCondStmt: elifCondStmt INDEQ "elif" expr colonBody
-             | INDEQ "elif" expr colonBody
-;
-ifStmt: "if" condStmt
+elifCondStmt: elifCondStmt INDEQ "elif" expr colonBody {
+                                                        // $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $6.code);
+                                                       }
+             | INDEQ "elif" expr colonBody {
+                                            // char *label = new_label();
+                                            // $$.code = scc(8, $3.code, putl(label), $4.code, "goto ", bplabel, "\n", putl(label2), $6.code);
+                                           }
 ;
 whileStmt: "while" expr colonBody
 ;
-routine:  symbol paramListColon "=" stmt 
+routine:  symbol paramListColon '=' stmt 
         | symbol paramListColon
 ;
 // enum: "enum"  symbolCommaNoHang
 //         | "enum" symbol
 // ;
-typeDef: symbol "="  typeDesc
+typeDef: symbol '='  typeDesc
 ;
 // varTuple: "("  symbolCommaNoHang ")" "="  expr
 //         | "("  symbol ")" "="  expr
 // ;
-colonBody: colon stmt
+colonBody: colon stmt {$$.code = $2.code; $$.nextlist = $2.nextlist;}
 ;
 // variable: varTuple 
 //          | declColon "=" expr 
 //          | declColon
 // ;
-variable: declColon "=" expr 
+variable: declColon '=' expr 
          | declColon
 ;
 secVariable: variable 
@@ -239,59 +548,169 @@ serVariable: INDEQ variable serVariable
 simpleStmt: returnStmt 
             | breakStmt 
             | continueStmt 
-            | exprStmt
+            | exprStmt {$$.code = $1.code; $$.nextlist = NULL;}
 ;
-complexOrSimpleStmt: ifStmt 
-                    | whileStmt 
-                    | forStmt 
-                    | "proc" routine 
-                    | "type" typeDef 
-                    | "var" secVariable 
-                    | simpleStmt
+complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;}
+                    | whileStmt {}
+                    | forStmt
+                    | "proc" routine
+                    | "type" typeDef
+                    | "var" secVariable
+                    | simpleStmt {$$.code = $1.code; $$.nextlist = NULL;}
 ;
-stmt: INDG complexOrSimpleStmt stmt2 DED 
-     | simpleStmt
+stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;}
+      | INDG stmt2 complexOrSimpleStmt DED {
+                                            char *label = new_label(); 
+                                            backpatch($2.nextlist, label);
+                                            globalnextlist = merge(globalnextlist, $2.nextlist);
+                                            $$.nextlist = $3.nextlist;
+                                            $$.code = scc(3, $2.code, putl(label), $3.code);
+                                           }
 ;
-stmt2: INDEQ complexOrSimpleStmt stmt2 
-      | 
+stmt2: stmt2 complexOrSimpleStmt INDEQ {
+                                        char *label = new_label(); 
+                                        backpatch($1.nextlist, label);
+                                        globalnextlist = merge(globalnextlist, $1.nextlist);
+                                        $$.nextlist = $2.nextlist;
+                                        $$.code = scc(3, $1.code, putl(label), $2.code);
+                                       }
+      | {$$.code = ""; $$.nextlist = NULL;}
 ;
 
 %%
 /* End of grammar */
 
+const char* g_current_filename = "stdin";
 
-// input:   /* empty */
-//         | input line
-// ;
+char* new_label(){
+    static int label_no = 0;
+    char *label_no_str = (char *)malloc(7 * sizeof(char));
+    sprintf(label_no_str,"%d",label_no);
+    char *label = sc("label",label_no_str);
+    label_no++;
+    return label;
+}
 
-// line:
-//           '\n'
-//         | exp '\n'   { printf ("\t%lf\n", $1); }
-//         | error '\n' { yyerrok;                  }
-// ;
+char* new_temp(){
+    static int label_no = 0;
+    char *label_no_str = (char *)malloc(7 * sizeof(char));
+    sprintf(label_no_str,"%d",label_no);
+    char *label = sc("temp",label_no_str);
+    label_no++;
+    return label;
+}
 
-// exp:      NUM                { $$ = $1;}
-//         | VAR                { $$ = $1->value.var;}
-//         | VAR '=' exp        { $$ = $3; $1->value.var = $3;}
-//         | FNCT '(' exp ')'   { $$ = (*(($1)->value.fptr))($3);}
-//         | exp '+' exp        { $$ = $1 + $3;}
-//         | exp '-' exp        { $$ = $1 - $3;}
-//         | exp '*' exp        { $$ = $1 * $3;}
-//         | exp '/' exp        { $$ = $1 / $3;}
-//         | '-' exp  %prec NEG { $$ = -$2;}
-//         | '(' exp ')'        { $$ = $2;}
-// ;
+char* new_bplabel(){
+    static int label_no = 0;
+    char *label_no_str = (char *)malloc(7 * sizeof(char));
+    sprintf(label_no_str,"%d",label_no);
+    char *label = sc("_bp",label_no_str);
+    label_no++;
+    return label;
+}
 
-// void init_table (){
-//    symrec *ptr1, *ptr2;
-//    ptr1 = putsym("sin", FNCT);
-//    ptr1->value.fptr = sin;
-//    ptr2 = putsym("cos", FNCT);
-//    ptr2->value.fptr = cos;
+char* sc(char * s1, char *s2){
+    char* res = (char*)malloc(strlen(s1) + strlen(s2) + 2);
+    strcpy(res,s1);
+    strcat(res,s2);
+    return res;
+}
+
+char * scc(int num,...){
+    va_list args1, args2;
+    va_start(args1, num);
+    va_copy(args2, args1);
+    int tot_len = 2;
+    for (int i=0; i<num; i++){
+        tot_len += strlen(va_arg(args1, char *));
+    }
+    va_end(args1);
+    char *s = malloc(tot_len * sizeof(char*));
+    s = strcpy(s,va_arg(args2, char *));
+    for (int i=1; i<num; i++){
+        strcat(s, va_arg(args2, char *));
+    }
+    va_end(args2);
+    return s;
+}
+
+void dump_IR(char * code){
+    FILE *fptr;
+    char filename[20] = ".mininimIR";
+    fptr = fopen(filename, "w");
+    fprintf(fptr, "%s",code);
+    fclose(fptr);
+}
+
+void dump_list_helper(FILE* fptr, bp_node* l){
+    if(l==NULL) return;
+    fprintf(fptr, "%s %s\n",l->temp_label,l->bp_label);
+    dump_list_helper(fptr,l->prev);    
+}
+
+
+void dump_list(bp_node* l){
+    FILE *fptr;
+    char filename[20] = ".mininimIR";
+    fptr = fopen(filename, "a");
+    fprintf(fptr, "IR_END\n");
+    fprintf(fptr, "\nPATCH_LABELS\n\n");
+    dump_list_helper(fptr,l);
+    fclose(fptr);
+}
+
+// symrec * putsym (char *sym_name,int sym_type){
+//   symrec *ptr;
+//   ptr = (symrec *) malloc (sizeof (symrec));
+//   ptr->name = (char *) malloc (strlen (sym_name) + 1);
+//   strcpy (ptr->name,sym_name);
+//   ptr->type = sym_type;
+//   ptr->value.var = 0; /* set value to 0 even if fctn.  */
+//   ptr->next = (struct symrec *)sym_table;
+//   sym_table = ptr;
+//   return ptr;
 // }
 
-int main (){
-   yyparse ();
+// symrec *getsym (char *sym_name){
+//   symrec *ptr;
+//   for (ptr = sym_table; ptr != (symrec *) 0;
+//        ptr = (symrec *)ptr->next)
+//     if (strcmp (ptr->name,sym_name) == 0)
+//       return ptr;
+//   return 0;
+// }
+
+int main(int argc, char* argv[]) {
+    yyin = stdin;
+
+    if(argc == 2) {
+        yyin = fopen(argv[1], "r");
+        g_current_filename = argv[1];
+        if(!yyin) {
+            perror(argv[1]);
+            return 1;
+        }
+    }
+
+    // parse through the input until there is no more:
+    do {
+        yyparse();
+    } while (!feof(yyin));
+    printf("------------------------------------------------------------------\n");
+    printf("BISON OUTPUT\n");
+    printf("------------------------------------------------------------------\n");
+    printf("True List:\n");
+    print_list(globaltruelist);
+    printf("False List:\n");
+    print_list(globalfalselist);
+    printf("Next List:\n");
+    print_list(globalnextlist);
+    printf("\nGenerated IR:\n");
+    printf("%s", final_IR);
+    dump_IR(final_IR);
+    dump_list(merge(merge(globalnextlist,globaltruelist),globalfalselist));
+    // Only in newer versions, apparently.
+    // yylex_destroy();
 }
 
 void yyerror (char *s)  /* Called by yyparse on error */{

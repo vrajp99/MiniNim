@@ -34,7 +34,7 @@
 # define YY_YY_NIM_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
-# define YYDEBUG 0
+# define YYDEBUG 1
 #endif
 #if YYDEBUG
 extern int yydebug;
@@ -54,10 +54,38 @@ extern int yydebug;
     INDG = 264,
     INDEQ = 265,
     DED = 266,
-    IFX = 267,
-    UPLUS = 287,
-    UMINUS = 288,
-    LPAREN = 289
+    BREAK = 267,
+    CONTINUE = 268,
+    ELIF = 269,
+    ELSE = 270,
+    FOR = 271,
+    IF = 272,
+    IN = 273,
+    NIL = 274,
+    PROC = 275,
+    RETURN = 276,
+    TUPLE = 277,
+    TYPE = 278,
+    VAR = 279,
+    WHILE = 280,
+    IFX = 281,
+    ELSEX = 282,
+    XOR = 283,
+    OR = 284,
+    AND = 285,
+    NE = 286,
+    GE = 287,
+    LE = 288,
+    EQ = 289,
+    SLICE = 290,
+    MOD = 291,
+    DIV = 292,
+    NOT = 293,
+    PEQ = 294,
+    MEQ = 295,
+    UPLUS = 296,
+    UMINUS = 297,
+    LPAREN = 298
   };
 #endif
 
@@ -66,15 +94,17 @@ extern int yydebug;
 
 union YYSTYPE
 {
-#line 15 "nim.y" /* yacc.c:1909  */
+#line 68 "nim.y" /* yacc.c:1909  */
 
 int integer;
 double floater;  /* For returning numbers.                   */
 char *str;
 char ch;
-struct symrec  *tptr;   /* For returning symbol-table pointers      */
+idorlit idl;
+// symrec  *tptr;   /* For returning symbol-table pointers      */
+sdd s_tree;
 
-#line 78 "nim.tab.h" /* yacc.c:1909  */
+#line 108 "nim.tab.h" /* yacc.c:1909  */
 };
 
 typedef union YYSTYPE YYSTYPE;
