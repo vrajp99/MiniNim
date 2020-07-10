@@ -1,1 +1,8 @@
 ./nimcache/
+.mininimir
+*.tab.o
+*.tab.c
+*.tab.h
+trial.c
+*.yy.c
+*.yy.o
