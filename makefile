@@ -1,5 +1,8 @@
 a.out: nim.tab.o lex.yy.o
-	cc -g nim.tab.o lex.yy.o -lfl -lm
+	cc -g nim.tab.o lex.yy.o -lfl -lm 
+	
+copy: 
+	cp ./.mininimIR ./mininimIR.mnmir
 
 nim.tab.o: nim.tab.h nim.tab.c
 	cc -g -c nim.tab.c

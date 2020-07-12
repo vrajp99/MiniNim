@@ -27,6 +27,14 @@ void set_yycolumn(int val) {
     set_yycolumn(yycolumn); \
     yycolumn += yyleng; \
 }
+#define LEXER_DEBUG
+#ifdef LEXER_DEBUG
+#define PRINTF(...) printf(__VA_ARGS__)
+#endif
+#ifndef LEXER_DEBUG
+#define PRINTF(...)
+#endif
+
 %}
 
 %x initial
@@ -39,8 +47,8 @@ void set_yycolumn(int val) {
 %option yylineno
 %option noyywrap
 
-OP \$|\^|\*|\/|div|mod|\%|\+|\-|\&|\.\.|==|<=|<|>=|>|!=|in|not|and|or|xor|\+=|\*=|=
-KEYW break|continue|elif|else|for|if|in|nil|proc|return|tuple|type|var|while
+OP \$|\^|\*|\/|div|mod|\%|\+|\-|\&|\.\.|==|<=|<|>=|>|!=|not|and|or|xor|\+=|\*=|=
+KEYW break|continue|elif|else|for|if|in|nil|proc|return|tuple|type|var|while|array|echo|readInt|readFloat
 
 letter [A-Za-z]
 digit [0-9] 
@@ -57,22 +65,22 @@ BOOLLIT true|false
 
 
 <*>\n { set_yycolumn(0); yylineno--; 
-      // printf("REJECT\n"); 
+      // PRINTF("REJECT\n"); 
       REJECT; }
 <initial>.  { set_yycolumn(yycolumn-1); indent_caller = normal; yyless(0); 
-            //  printf("initial .\n");
+            //  PRINTF("initial .\n");
              BEGIN(indent); }
 <initial>\n { indent_caller = normal; yyless(0); BEGIN(indent);
-            //   printf("initial \\n"); 
+            //   PRINTF("initial \\n"); 
             }
 <indent>" "     { g_current_line_indent++; 
-                // printf("Indent space\n");
+                // PRINTF("Indent space\n");
                 }
 <indent>\n      { g_current_line_indent = 0; 
-                // printf("Indent \\n\n");
+                // PRINTF("Indent \\n\n");
                 /* ignoring blank line */ }
 <indent><<EOF>> {   
-                    // printf("\nEOF");
+                    // PRINTF("\nEOF");
                     // When encountering the end of file, we want to emit an
                     // outdent for all indents currently left.
                     if(indent_stack->value != 0) {
@@ -94,7 +102,7 @@ BOOLLIT true|false
                 }
 
 <indent>.       {   
-                    // printf("Indenter Entry\n");
+                    // PRINTF("Indenter Entry\n");
                     if(!g_is_fake_outdent_symbol) {
                         unput(*yytext);
                     }
@@ -103,7 +111,7 @@ BOOLLIT true|false
                     if(g_current_line_indent > indent_stack->value) {
                         push(&indent_stack,g_current_line_indent);
                         BEGIN(indent_caller);
-                        printf("INDG\n");
+                        PRINTF("INDG\n");
                         return INDG;
                     } else if (g_current_line_indent == indent_stack->value) {
                         BEGIN(indent_caller);
@@ -111,13 +119,13 @@ BOOLLIT true|false
                         {
                             ft = 1;
                         } else {
-                            printf("INEQ\n");
+                            PRINTF("INEQ\n");
                             return INDEQ;
                         }
                     } else if(g_current_line_indent < indent_stack->value) {
                         pop(&indent_stack);
                         if(g_current_line_indent != indent_stack->value) {
-                            // printf("This IF\n");
+                            // PRINTF("This IF\n");
                             for(size_t i = 0 ; i < g_current_line_indent ; ++i) {
                                 unput(' ');
                             }
@@ -129,10 +137,10 @@ BOOLLIT true|false
                             // }
                             // unput('\n');
                         } else {
-                            // printf("That IF\n");
+                            // PRINTF("That IF\n");
                             // BEGIN(indent_caller);
                         }
-                        printf("DED\n");
+                        PRINTF("DED\n");
                         return DED;
                     } else {
                         BEGIN(indent_caller);
@@ -140,14 +148,14 @@ BOOLLIT true|false
                 }
 
 <normal>\n    {
-                // printf("NORMAL \n"); 
+                // PRINTF("NORMAL \n"); 
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
 <normal><<EOF>> {
-                // printf("NORMAL \n"); 
+                // PRINTF("NORMAL \n"); 
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
-<normal>{OP}        {printf("OP\n");if(strcmp("$",yytext)==0){return '$';}
+<normal>{OP}        {PRINTF("OP\n");if(strcmp("$",yytext)==0){return '$';}
                      else if(strcmp("*",yytext)==0){return '*';}
                      else if(strcmp("/",yytext)==0){return '/';}
                      else if(strcmp("div",yytext)==0){return DIV;}
@@ -171,7 +179,7 @@ BOOLLIT true|false
                      else if(strcmp("*=",yytext)==0){return MEQ;}
                      else if(strcmp("=",yytext)==0){return '=';}
                     }
-<normal>{KEYW}      {printf("KeyW\n");if(strcmp("break",yytext)==0){return BREAK;}
+<normal>{KEYW}      {PRINTF("KeyW\n");if(strcmp("break",yytext)==0){return BREAK;}
                      else if(strcmp("continue",yytext)==0){return CONTINUE;}
                      else if(strcmp("elif",yytext)==0){return ELIF;}
                      else if(strcmp("else",yytext)==0){return ELSE;}
@@ -185,21 +193,24 @@ BOOLLIT true|false
                      else if(strcmp("type",yytext)==0){return TYPE;}
                      else if(strcmp("var",yytext)==0){return VAR;}
                      else if(strcmp("while",yytext)==0){return WHILE;}
+                     else if(strcmp("echo",yytext)==0){return ECHOP;}
+                     else if(strcmp("readInt",yytext)==0){return RDINT;}
+                     else if(strcmp("readFloat",yytext)==0){return RDFLT;}
                     }
 
-<normal>{INTLIT}      {sscanf(yytext,"%d",&yylval.integer);printf("Int\n");return INTLIT;}
+<normal>{INTLIT}      {sscanf(yytext,"%d",&yylval.integer);PRINTF("Int\n");return INTLIT;}
 
-<normal>{FLOATLIT}    {sscanf(yytext,"%lf",&yylval.floater);printf("Float\n");return FLOATLIT;}
+<normal>{FLOATLIT}    {sscanf(yytext,"%lf",&yylval.floater);PRINTF("Float\n");return FLOATLIT;}
 
-<normal>{STRLIT}      {yylval.str = strdup(yytext);printf("String\n");return STRLIT;}
+<normal>{STRLIT}      {yylval.str = strdup(yytext);PRINTF("String\n");return STRLIT;}
 
-<normal>{BOOLLIT}     {if (yytext[0]=='t') {yylval.integer = 1;} else {yylval.integer = 0;} printf("Bool\n");return BOOLLIT;}
+<normal>{BOOLLIT}     {if (yytext[0]=='t') {yylval.integer = 1;} else {yylval.integer = 0;} PRINTF("Bool\n");return BOOLLIT;}
 
-<normal>{IDENT}       {yylval.str = strdup(yytext);printf("IDENT\n");return IDENT;}
+<normal>{IDENT}       {yylval.str = strdup(yytext);PRINTF("IDENT\n");return IDENT;}
 
 <normal>[ ]+          /* eat up whitespace */
 
-<normal>.              {printf("%s\n", yytext);return yytext[0];}
+<normal>.              {PRINTF("%s\n", yytext);return yytext[0];}
 
 %%
 // {number} {sscanf(yytext,"%lf",&yylval.val);return NUM;}

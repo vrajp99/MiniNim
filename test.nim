@@ -14,4 +14,6 @@ block outout:
             break
         echo x
     echo 2
+    echo -5 % 3
+    echo -5 mod 3
     # echo y

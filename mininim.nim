@@ -1,13 +1,9 @@
-a = 2
-if (a==2) and (a<=3): 
-    if (a==2) and (a<=3): 
-        a = 10
-
-    else: 
-        a = 2+2
-    a = 100
-    
-else: 
-    a = 2+2
-
-a = 100
+var a: int = 0
+var b: int = 1
+var n: int
+readInt n
+for i in 1..n:
+    var t:int = b
+    b = a + b
+    a = t
+    echo a

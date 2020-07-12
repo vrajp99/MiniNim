@@ -1,4 +1,4 @@
-./nimcache/
+**/nimcache
 .mininimir
 *.tab.o
 *.tab.c
@@ -6,3 +6,4 @@
 trial.c
 *.yy.c
 *.yy.o
+**/.vscode

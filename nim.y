@@ -10,18 +10,31 @@ Reference: http://dinosaur.compilertools.net/bison/bison_5.html
 #include <math.h>
 #include "backpatch.h"
 #include "symrec.h"  /* Contains definition of `symrec" */
+#define PARSER_DEBUG
+
+
+#ifdef PARSER_DEBUG
+#define PRINTF(...) printf(__VA_ARGS__)
+#endif
+#ifndef PARSER_DEBUG
+#define PRINTF(...)
+#endif
+
+#define TO_RED "\033[1;31m"
+#define TO_NORMAL "\033[0m"
+
 int  yylex(void);
 void yyerror (char  *); 
 FILE *yyin;
 int curr_scope = 0;
-symrec *sym_table = (symrec *)0;
+symrec *sym_table = NULL;
 char* new_label();
 char* new_temp();
 char* new_bplabel();
 char* sc(char * s1, char *s2);
 char* scc(int num,...);
 void dump_IR(char *);
-char boolean[2][10] = {"false","true"};
+char boolean[2][10] = {"0","1"};
 char* putl(char * s){
     return sc(s,":\n");
 }
@@ -51,18 +64,21 @@ void backpatch(bp_node *l, char *bp_label){
 void print_list(bp_node* l){
     if (l==0) return;
     if (l->bp_label == NULL){
-        printf("Internal Warning: Null Label Found for backpatch label: %s", l->temp_label);
+        PRINTF("Internal Warning: Null Label Found for backpatch label: %s\n", l->temp_label);
     } else {
-        printf("%s   %s\n", l->temp_label, l->bp_label);
+        PRINTF("%s   %s\n", l->temp_label, l->bp_label);
         print_list(l->prev);
     }
 }
-
 
 bp_node* globaltruelist = NULL;
 bp_node* globalfalselist = NULL;
 bp_node* globalnextlist = NULL;
 char * final_IR;
+symrec* final_sym_table = NULL;
+void open_scope();
+void close_scope();
+void puttemp(char*,var_type);
 %}
 
 %union {
@@ -99,6 +115,12 @@ sdd s_tree;
 %token TYPE "type"
 %token VAR "var"
 %token WHILE "while"
+%token ECHOP "echo"
+%token ARRAY "array"
+%token RDINT "readInt"
+%token RDFLT "readFloat"
+
+
 
 %nonassoc IFX
 %nonassoc ELSEX
@@ -146,7 +168,7 @@ sdd s_tree;
 %debug
 // Non-Terminals Types
 
-%type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt
+%type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt whileStmt breakStmt continueStmt typeDesc secVariable variable forStmt
 %type <idl> symbol literal identOrLiteral
 
 /* Grammar follows */
@@ -190,6 +212,7 @@ colon: ':'
 ;
 sExpr: sExpr "xor" sExpr  {
                             char *t = new_temp();
+                            puttemp(t,INT_TYPE);
                             char *label = new_label();
                             char *B1_truelabel = new_label();
                             char *B1_falselabel = new_label();
@@ -205,8 +228,15 @@ sExpr: sExpr "xor" sExpr  {
                             globaltruelist = merge(globaltruelist, $3.truelist);
                             globalfalselist = merge(globalfalselist, $1.falselist);
                             globalfalselist = merge(globalfalselist, $3.falselist);
+                            $$.type = BOOL_TYPE;
                             $$.truelist = create_bp(bptlabel);
                             $$.falselist = create_bp(bpflabel);
+                            if (($1.type != BOOL_TYPE) || ($3.type != BOOL_TYPE)){
+                                printf(TO_RED);
+                                printf("Error: Operands not of boolean type for 'xor'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
                             $$.code = scc(31, t, " = 0\n", $1.code, putl(B1_truelabel), t, " = 1\ngoto c", label, "\n", putl(B1_falselabel), t, " = 0\n", putl(label), $3.code, putl(B2_truelabel), "if ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n", putl(B2_falselabel), "ifFalse ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n");
                           }
       | sExpr "or" sExpr  {
@@ -215,6 +245,13 @@ sExpr: sExpr "xor" sExpr  {
                             globalfalselist = merge(globalfalselist, $1.falselist);
                             $$.truelist = merge($1.truelist,$3.truelist);
                             $$.falselist = $3.falselist;
+                            $$.type = BOOL_TYPE;
+                            if (($1.type != BOOL_TYPE) || ($3.type != BOOL_TYPE)){
+                                printf(TO_RED);
+                                printf("Error: Operands not of boolean type for 'or'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
                             $$.code = scc(3,$1.code, putl(label), $3.code);
                           }
       | sExpr "and" sExpr {
@@ -223,6 +260,13 @@ sExpr: sExpr "xor" sExpr  {
                             globaltruelist = merge(globaltruelist, $1.truelist);
                             $$.falselist = merge($1.falselist,$3.falselist);
                             $$.truelist = $3.truelist;
+                            $$.type = BOOL_TYPE;
+                            if (($1.type != BOOL_TYPE) || ($3.type != BOOL_TYPE)){
+                                printf(TO_RED);
+                                printf("Error: Operands not of boolean type for 'and'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
                             $$.code = scc(3,$1.code, putl(label), $3.code);
                           }
       | sExpr "!=" sExpr {
@@ -230,109 +274,382 @@ sExpr: sExpr "xor" sExpr  {
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " neq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " ne ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " nef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fne ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fnef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '!='\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, opr , $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                          }
       | sExpr '>' sExpr {
                             char *bplabel1 = new_bplabel();
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " gt ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " lt ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " ltf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " flt ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fltf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '>'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $3.addr, opr, $1.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                         }
       | sExpr ">=" sExpr {
                             char *bplabel1 = new_bplabel();
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " geq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " le ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " lef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fle ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " flef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '>='\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $3.addr, opr, $1.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                          }
       | sExpr '<' sExpr {
                             char *bplabel1 = new_bplabel();
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " lt ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " lt ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " ltf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " flt ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fltf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '<'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, opr, $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                         }
       | sExpr "<=" sExpr {
                             char *bplabel1 = new_bplabel();
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " leq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " le ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " lef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " fle ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " flef ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '<='\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, opr, $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                          }
       | sExpr "==" sExpr {
                             char *bplabel1 = new_bplabel();
                             char *bplabel2 = new_bplabel();
                             $$.truelist = create_bp(bplabel1);
                             $$.falselist = create_bp(bplabel2);
-                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, " eq ", $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
+                            $$.type = BOOL_TYPE;
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " eq ";
+                                // puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " eqf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " feq ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " feqf ";
+                                // puttemp($$.addr, FLOAT_TYPE);
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '=='\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(11, $1.code, $3.code, "if ", $1.addr, opr, $3.addr, " goto ", bplabel1, "\ngoto ", bplabel2, "\n");
                          }
-      | sExpr ".." sExpr {}
       | sExpr '-' sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
                             $$.addr = new_temp(); 
-                            $$.code = scc(8 , $1.code, $3.code, $$.addr," = ", $1.addr," - ", $3.addr, "\n");
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " - ";
+                                $$.type = INT_TYPE;
+                                puttemp($$.addr, INT_TYPE);
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " -f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f- ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f-f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '-'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(8 , $1.code, $3.code, $$.addr," = ", $1.addr, opr , $3.addr, "\n");
                         }
       | sExpr '+' sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
-                            $$.addr = new_temp(); 
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," + ", $3.addr,"\n");
+                            $$.addr = new_temp();
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " + ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " +f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f+ ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f+f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '+'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            } 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr, $3.addr,"\n");
                         }
       | sExpr '%' sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
                             $$.addr = new_temp(); 
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," mod ", $3.addr,"\n");
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " mod ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            }else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for 'mod'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            } 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr, $3.addr,"\n");
                         }
       | sExpr "mod" sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
                             $$.addr = new_temp(); 
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," mod ", $3.addr,"\n");
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " mod ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            }else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for 'mod'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            } 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr , $3.addr,"\n");
                           }
       | sExpr "div" sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
                             $$.addr = new_temp(); 
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," idiv ", $3.addr,"\n");
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " idiv ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            }else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for 'div'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            } 
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr , $3.addr,"\n");
                           }
       | sExpr '/' sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;
-                            $$.addr = new_temp(); 
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," / ", $3.addr,"\n");
+                            $$.addr = new_temp();
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " / ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " /f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f/ ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f/f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '/'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr, $3.addr,"\n");
                         }
       | sExpr '*' sExpr {
                             $$.truelist = NULL;
                             $$.falselist = NULL;   
                             $$.addr = new_temp();
-                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr," * ", $3.addr,"\n");
+                            char *opr;
+                            if ($1.type == INT_TYPE && $3.type == INT_TYPE){
+                                opr = " * ";
+                                puttemp($$.addr, INT_TYPE);
+                                $$.type = INT_TYPE;
+                            } else if($1.type == INT_TYPE && $3.type == FLOAT_TYPE){
+                                opr = " *f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == INT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f* ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else if ($3.type == FLOAT_TYPE && $1.type == FLOAT_TYPE){
+                                opr = " f*f ";
+                                puttemp($$.addr, FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
+                            } else{
+                                printf(TO_RED);
+                                printf("Error: Operands not of suitable type for '*'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.code = scc(8, $1.code, $3.code, $$.addr," = ", $1.addr, opr, $3.addr,"\n");
                         }
       | '+' sExpr %prec UPLUS {
                                 $$.truelist = NULL;
                                 $$.falselist = NULL;
                                 $$.code = $2.code;
                                 $$.addr = $2.addr;
+                                $$.type = $2.type;
+                                if ($2.type != INT_TYPE && $2.type != FLOAT_TYPE){
+                                    printf(TO_RED);
+                                    printf("Error: Operands not of suitable type for unary '+'\n");
+                                    printf(TO_NORMAL);
+                                    exit(EXIT_FAILURE);
+                                }
                               }
       | '-' sExpr %prec UMINUS {
                                 $$.truelist = NULL;
                                 $$.falselist = NULL;
                                 $$.addr = new_temp(); 
-                                $$.code = scc(5, $2.code, $$.addr, " = - ", $2.addr, "\n");
+                                $$.type = $2.type;
+                                char *opr;
+                                if ($2.type == INT_TYPE){
+                                    puttemp($$.addr, INT_TYPE);
+                                    opr = "- ";
+                                } else if($2.type == FLOAT_TYPE){
+                                    puttemp($$.addr, FLOAT_TYPE);
+                                    opr = "-f ";
+                                } else{
+                                    printf(TO_RED);
+                                    printf("Error: Operands not of suitable type for unary '-'\n");
+                                    printf(TO_NORMAL);
+                                    exit(EXIT_FAILURE);
+                                }
+                                $$.code = scc(6, $2.code, $$.addr, " = ", opr, $2.addr, "\n");
                                }
       | '$' sExpr {}
       | "not" sExpr {
                         $$.falselist = $$.truelist;
                         $$.truelist = $$.falselist;
+                        if ($2.type != BOOL_TYPE){
+                            printf(TO_RED);
+                            printf("Error: Operands not of suitable type for 'not'\n");
+                            printf(TO_NORMAL);
+                            exit(EXIT_FAILURE);
+                        }
                         $$.code = $2.code;
+                        $$.type = $2.type;
                     }
       | '(' sExpr ')' %prec LPAREN {
                                     $$.truelist = $2.truelist;
                                     $$.falselist = $2.falselist;
                                     $$.code = $2.code;
                                     $$.addr = $2.addr;
+                                    $$.type = $2.type;
                                    }
       | primary {   
                     // TODO: Add support for true false
@@ -340,6 +657,7 @@ sExpr: sExpr "xor" sExpr  {
                     $$.falselist = $1.falselist;
                     $$.code = $1.code; 
                     $$.addr = $1.addr;
+                    $$.type = $1.type;
                 }
 ;
 symbol: IDENT {
@@ -413,13 +731,39 @@ paramListColon: paramList ':'  typeDesc
                | ':'  typeDesc
                |
 ;
-forStmt: "for"  symbolCommaNoHang  "in" expr colonBody
-        | "for"  symbol  "in" expr colonBody
+
+/* forStmt: "for"  symbolCommaNoHang  "in" expr colonBody
+        | "for"  symbol  "in" expr colonBody {}
+; */
+
+forStmt: "for" {open_scope();}  symbol {putsym($3.value.name,INT_TYPE);} "in" expr ".." expr colonBody {
+                                                                          char* label = new_label();
+                                                                          char* bplabel = new_bplabel();
+                                                                          symrec* sym = getsym($3.value.name);
+                                                                          char* sa = sym->alias;
+                                                                          backpatch($9.nextlist, label);
+                                                                          globalnextlist = merge(globalnextlist, $9.nextlist);
+                                                                          $$.nextlist = merge($9.breaklist, create_bp(bplabel));
+                                                                          $$.breaklist = NULL;
+                                                                          /*
+                                                                                expr1.code
+                                                                                expr2.code
+                                                                                sym->alias = expr1.addr
+                                                                                label1:
+                                                                                if expr2 < sym->alias goto bp_label
+                                                                                bodycode
+                                                                                sym->alias = sym->alias + _incr
+                                                                                goto label1
+                                                                          */
+                                                                          $$.code = scc(22, $6.code, $8.code, sa, " = ", $6.addr,"\n", putl(label), "if ", $8.addr, " lt ", sa, " goto ",bplabel, "\n", $9.code, sa, " = ",sa," + ","_incr\ngoto ",label,"\n");
+                                                                          close_scope();
+                                                                      }
 ;
 expr: ifExpr 
      | sExpr {
                 $$.code = $1.code; 
                 $$.addr = $1.addr;
+                $$.type = $1.type;
                 $$.truelist = $1.truelist;
                 $$.falselist = $1.falselist;
              }
@@ -429,40 +773,68 @@ primary: identOrLiteral primary2
                             $$.addr = new_temp();
                             $$.truelist = NULL;
                             $$.falselist = NULL; 
-                            if($1.is_ident){$$.code = scc(4, $$.addr, " = ", $1.value.name, "\n");} 
+                            if($1.is_ident){
+                                symrec* symb = getsym($1.value.name);
+                                puttemp($$.addr,symb->type);
+                                $$.type = symb->type;
+                                $$.code = scc(4, $$.addr, " = ", symb->alias, "\n");
+                            } 
                             else if($1.type==INT_TYPE){
+                                puttemp($$.addr,INT_TYPE);
+                                $$.type = INT_TYPE;
                                 char *int_str = (char *)malloc(50 * sizeof(char));
                                 sprintf(int_str,"%d",$1.value.ival);
                                 $$.code = scc(4, $$.addr, " = ", int_str, "\n");
                             }
                             else if($1.type==FLOAT_TYPE){
+                                puttemp($$.addr,FLOAT_TYPE);
+                                $$.type = FLOAT_TYPE;
                                 char *float_str = (char *)malloc(50 * sizeof(char));
                                 sprintf(float_str,"%f",$1.value.fval);
-                                $$.code = scc(4, $$.addr, " = ", float_str,"\n");
+                                $$.code = scc(4, $$.addr, " f=f ", float_str,"\n");
                             }
                             else if($1.type==STR_TYPE){
-                                $$.code = scc(4, $$.addr, " = ", $1.value.sval, "\n");
+                                puttemp($$.addr,STR_TYPE);
+                                $$.type = STR_TYPE;
+                                $$.code = scc(4, $$.addr, " s=s ", $1.value.sval, "\n");
                             }
                             else if($1.type==CHAR_TYPE){
+                                puttemp($$.addr,CHAR_TYPE);
+                                $$.type = CHAR_TYPE;
                                 char *char_str = (char *)malloc(3 * sizeof(char));
                                 sprintf(char_str,"%c",$1.value.cval);
                                 $$.code = scc(4, $$.addr, " = ", char_str, "\n");
                             }
                             else if($1.type==BOOL_TYPE){
+                                puttemp($$.addr,BOOL_TYPE);
+                                $$.type = BOOL_TYPE;
                                 char* bplabel = new_bplabel();
-                                if ($1.value.bval==1)
-                                    {$$.truelist = create_bp(bplabel);}
-                                else
-                                    {$$.falselist = create_bp(bplabel);}
+                                if ($1.value.bval==1){
+                                    $$.truelist = create_bp(bplabel);
+                                }
+                                else{
+                                    $$.falselist = create_bp(bplabel);
+                                }
                                 // $$.code = scc(4, $$.addr, " = ", boolean[$1.value.bval], "\n"));
-                                $$.code = scc(3, "goto ", bplabel, "\n");
+                                $$.code = scc(7, "goto ", bplabel, "\n", $$.addr, " = ", boolean[$1.value.bval], "\n");
                             }
                          }
 ;
 primary2: primarySuffix primary2 
          | primarySuffix
 ;
-typeDesc: symbol 
+typeDesc: symbol { 
+                    if(strcmp($1.value.name, "int")==0){
+                        $$.type = INT_TYPE;
+                    } else if (strcmp($1.value.name, "float")==0){
+                        $$.type = FLOAT_TYPE;
+                    } else {
+                        printf(TO_RED);
+                        printf("Error: Unknown type assigned to variable.\n");
+                        printf(TO_NORMAL);
+                        exit(EXIT_FAILURE);
+                    }
+                } 
          | inlTupleDecl 
          | arrayDecl
 ;
@@ -472,8 +844,26 @@ typeDesc: symbol
 //          | arrayDecl
 // ;
 exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
-         | symbol '=' expr {$$.code = scc(5, $3.code, $1.value.name, " = ", $3.addr, "\n"); $$.nextlist = NULL;}
-         | symbol "+=" expr {} 
+         | symbol '=' expr  {
+                                char* opr;
+                                symrec * symb = getsym($1.value.name);
+                                if ($3.type == INT_TYPE && symb->type == FLOAT_TYPE){
+                                    opr = " =f ";
+                                } else if ($3.type == INT_TYPE && symb->type == INT_TYPE){
+                                    opr = " = ";
+                                } else if (symb->type == FLOAT_TYPE && $3.type == FLOAT_TYPE){
+                                    opr = " f= ";
+                                }
+                                else {
+                                    printf(TO_RED);
+                                    printf("Error: Type assigned to variable.\n");
+                                    printf(TO_NORMAL);
+                                    exit(EXIT_FAILURE);
+                                }
+                                $$.code = scc(5, $3.code, symb->alias, opr, $3.addr, "\n"); 
+                                $$.nextlist = NULL;
+                            }
+         | symbol "+=" expr {}
          | symbol "*=" expr {}
 ;
 // exprStmt: sExpr 
@@ -484,9 +874,19 @@ exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
 returnStmt: "return" expr 
            | "return"
 ;
-breakStmt: "break"
+breakStmt: "break" {
+                        char *bplabel = new_bplabel();
+                        $$.breaklist = create_bp(bplabel);
+                        $$.nextlist = NULL;
+                        $$.code = scc(3,"goto ", bplabel, "\n");
+                   }
 ;
-continueStmt: "continue" 
+continueStmt: "continue" {
+                            char *bplabel = new_bplabel();
+                            $$.breaklist = NULL;
+                            $$.nextlist = create_bp(bplabel);
+                            $$.code = scc(3,"goto ", bplabel, "\n");
+                         }
 ;
 ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
          |"if" expr colonBody INDEQ elifCondStmt "else" colonBody {}
@@ -495,6 +895,7 @@ ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
                                             backpatch($2.truelist, label);
                                             globaltruelist = merge(globaltruelist, $2.truelist);
                                             $$.nextlist = merge($2.falselist, $3.nextlist);
+                                            $$.breaklist = $3.breaklist;
                                             $$.code = scc(3, $2.code, putl(label), $3.code);
                                           }
          | "if" expr colonBody INDEQ "else" colonBody {
@@ -506,6 +907,7 @@ ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
                                                         globalfalselist = merge(globalfalselist, $2.falselist);
                                                         globaltruelist = merge(globaltruelist, $2.truelist);
                                                         $$.nextlist = merge(create_bp(bplabel) ,merge($3.nextlist, $6.nextlist));
+                                                        $$.breaklist = merge($3.breaklist,$6.breaklist);
                                                         $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $6.code);
                                                       }
 ;
@@ -517,7 +919,17 @@ elifCondStmt: elifCondStmt INDEQ "elif" expr colonBody {
                                             // $$.code = scc(8, $3.code, putl(label), $4.code, "goto ", bplabel, "\n", putl(label2), $6.code);
                                            }
 ;
-whileStmt: "while" expr colonBody
+whileStmt: "while" expr colonBody {
+                                      char* label1 = new_label();
+                                      char* label2 = new_label();
+                                      backpatch($3.nextlist, label1);
+                                      backpatch($2.truelist, label2);
+                                      globalnextlist = merge(globalnextlist,$3.nextlist);
+                                      globaltruelist = merge(globaltruelist, $2.truelist);
+                                      $$.nextlist = merge($2.falselist,$3.breaklist);
+                                      $$.breaklist = NULL;
+                                      $$.code = scc(7,putl(label1),$2.code,putl(label2),$3.code,"goto ",label1,"\n");
+                                  }
 ;
 routine:  symbol paramListColon '=' stmt 
         | symbol paramListColon
@@ -530,40 +942,98 @@ typeDef: symbol '='  typeDesc
 // varTuple: "("  symbolCommaNoHang ")" "="  expr
 //         | "("  symbol ")" "="  expr
 // ;
-colonBody: colon stmt {$$.code = $2.code; $$.nextlist = $2.nextlist;}
+colonBody: colon {open_scope();} stmt { close_scope();$$.code = $3.code; $$.nextlist = $3.nextlist; $$.breaklist = $3.breaklist;}
 ;
 // variable: varTuple 
 //          | declColon "=" expr 
 //          | declColon
 // ;
-variable: declColon '=' expr 
-         | declColon
+variable: symbol ':'  typeDesc '=' expr {
+                                            $$.nextlist = NULL; $$.breaklist = NULL;
+                                            putsym($1.value.name,$3.type);
+                                            symrec * symb = getsym($1.value.name);
+                                            $$.code = scc(5, $5.code, symb->alias, " = ", $5.addr,"\n");
+                                        }
+         | symbol ':'  typeDesc {
+                                    putsym($1.value.name,$3.type);
+                                    $$.nextlist = NULL; $$.breaklist = NULL; 
+                                    $$.code="";
+                                }
 ;
-secVariable: variable 
+secVariable: variable {$$.code = $1.code; $$.nextlist=$1.nextlist; $$.breaklist = $1.breaklist;}
             | INDG variable serVariable DED
 ;
 serVariable: INDEQ variable serVariable 
             | 
 ;
 simpleStmt: returnStmt 
-            | breakStmt 
-            | continueStmt 
-            | exprStmt {$$.code = $1.code; $$.nextlist = NULL;}
+            | breakStmt {
+                            $$.nextlist = $1.nextlist;
+                            $$.breaklist = $1.breaklist;
+                            $$.code = $1.code;
+                        }
+            | continueStmt {
+                               $$.nextlist = $1.nextlist;
+                               $$.breaklist = $1.breaklist;
+                               $$.code = $1.code;
+                           } 
+            | exprStmt {$$.code = $1.code; $$.nextlist = NULL; $$.breaklist = NULL;}
 ;
-complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;}
-                    | whileStmt {}
+complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
+                    | whileStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
                     | forStmt
+                    | "echo" expr { 
+                                        PRINTF("Idhar Aaya?\n");
+                                        char * opr;
+                                        if($2.type == INT_TYPE){
+                                            opr = "iprint ";
+                                        } else if ($2.type == FLOAT_TYPE){
+                                            opr = "fprint ";
+                                        } else if ($2.type == STR_TYPE || $2.type == CHAR_TYPE){
+                                            opr = "sprint ";
+                                        } else {
+                                            printf(TO_RED);
+                                            printf("Error: Invalid type for 'echo'\n");
+                                            printf(TO_NORMAL);
+                                            exit(EXIT_FAILURE);
+                                        }
+                                        $$.nextlist = NULL; $$.breaklist = NULL;
+                                        $$.code = scc(4,$2.code, opr ,$2.addr,"\n");
+                                    }
                     | "proc" routine
                     | "type" typeDef
-                    | "var" secVariable
-                    | simpleStmt {$$.code = $1.code; $$.nextlist = NULL;}
+                    | "var" secVariable {$$.code = $2.code; $$.nextlist = $2.nextlist; $$.breaklist = $2.breaklist;}
+                    | "readInt" symbol {
+                                            symrec * symb = getsym($2.value.name);
+                                            if (symb->type != INT_TYPE){
+                                                printf(TO_RED);
+                                                printf("Error: Invalid type for 'readInt'\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);
+                                            }
+                                            $$.nextlist = NULL; $$.breaklist = NULL;
+                                            $$.code  = scc(3,"iread ",symb->alias,"\n");
+                                       }
+                    | "readFloat" symbol {
+                                            symrec * symb = getsym($2.value.name);
+                                            if (symb->type != FLOAT_TYPE){
+                                                printf(TO_RED);
+                                                printf("Error: Invalid type for 'readFloat'\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);
+                                            }
+                                            $$.nextlist = NULL; $$.breaklist = NULL;
+                                            $$.code  = scc(3,"fread ",symb->alias,"\n");
+                                        }
+                    | simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;$$.breaklist = $1.breaklist;}
 ;
-stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;}
+stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
       | INDG stmt2 complexOrSimpleStmt DED {
                                             char *label = new_label(); 
                                             backpatch($2.nextlist, label);
                                             globalnextlist = merge(globalnextlist, $2.nextlist);
                                             $$.nextlist = $3.nextlist;
+                                            $$.breaklist = merge($2.breaklist, $3.breaklist);
                                             $$.code = scc(3, $2.code, putl(label), $3.code);
                                            }
 ;
@@ -572,9 +1042,10 @@ stmt2: stmt2 complexOrSimpleStmt INDEQ {
                                         backpatch($1.nextlist, label);
                                         globalnextlist = merge(globalnextlist, $1.nextlist);
                                         $$.nextlist = $2.nextlist;
+                                        $$.breaklist = merge($1.breaklist, $2.breaklist);
                                         $$.code = scc(3, $1.code, putl(label), $2.code);
                                        }
-      | {$$.code = ""; $$.nextlist = NULL;}
+      | {$$.code = ""; $$.nextlist = NULL; $$.breaklist = NULL;}
 ;
 
 %%
@@ -595,7 +1066,7 @@ char* new_temp(){
     static int label_no = 0;
     char *label_no_str = (char *)malloc(7 * sizeof(char));
     sprintf(label_no_str,"%d",label_no);
-    char *label = sc("temp",label_no_str);
+    char *label = sc("_temp",label_no_str);
     label_no++;
     return label;
 }
@@ -659,26 +1130,121 @@ void dump_list(bp_node* l){
     fclose(fptr);
 }
 
-// symrec * putsym (char *sym_name,int sym_type){
-//   symrec *ptr;
-//   ptr = (symrec *) malloc (sizeof (symrec));
-//   ptr->name = (char *) malloc (strlen (sym_name) + 1);
-//   strcpy (ptr->name,sym_name);
-//   ptr->type = sym_type;
-//   ptr->value.var = 0; /* set value to 0 even if fctn.  */
-//   ptr->next = (struct symrec *)sym_table;
-//   sym_table = ptr;
-//   return ptr;
-// }
+void dump_symtab_helper(FILE* fptr, symrec* table){
+    if(table==NULL) return;
+    fprintf(fptr, "%s %d %d\n",table->alias,table->type, table->type*4 + 4);
+    dump_symtab_helper(fptr,table->prev);    
+}
 
-// symrec *getsym (char *sym_name){
-//   symrec *ptr;
-//   for (ptr = sym_table; ptr != (symrec *) 0;
-//        ptr = (symrec *)ptr->next)
-//     if (strcmp (ptr->name,sym_name) == 0)
-//       return ptr;
-//   return 0;
-// }
+void dump_symtab(symrec *table){
+    FILE *fptr;
+    char filename[20] = ".mininimIR";
+    fptr = fopen(filename, "a");
+    fprintf(fptr, "\nDATA\n\n");
+    dump_symtab_helper(fptr,table);
+    fclose(fptr);
+}
+
+void print_symtab(symrec *table){
+    if (table == NULL) return;
+    char s[5][10] = {"INT","FLOAT","BOOL","STR","CHAR"};
+    PRINTF("%s    %s\n",table->alias,s[table->type]);
+    print_symtab(table->prev);
+}
+
+void open_scope(){
+    curr_scope++;
+}
+
+void purge_table(symrec* var){
+    if(var == NULL) return;
+    if(var->scope==curr_scope){
+        symrec * prev_var = var->prev;
+        if(var->is_copy == True) {
+            free(var);
+        } else {
+            var->prev = final_sym_table;
+            final_sym_table = var;
+        }
+        sym_table = prev_var;
+        purge_table(prev_var);
+    }
+}
+
+void close_scope(){
+    purge_table(sym_table);
+    curr_scope--;
+}
+
+void putsymraw(char* name,var_type typ){
+    symrec* var = (symrec *)malloc(sizeof(symrec));
+    var->name = name;
+    var->alias = new_temp();
+    var->type = typ;
+    var->is_copy = False;
+    var->prev = sym_table;
+    var->scope = curr_scope;
+    sym_table = var;
+}
+
+void puttemp(char* temp_name,var_type typ){
+    symrec* var = (symrec *)malloc(sizeof(symrec));
+    var->name = "";
+    var->alias = temp_name;
+    var->type = typ;
+    var->is_copy = False;
+    var->prev = sym_table;
+    var->scope = curr_scope;
+    sym_table = var;
+}
+
+void copysymtoscope(symrec* sym){
+    symrec* var = (symrec *)malloc(sizeof(symrec));
+    var->name = sym->name;
+    var->alias = sym->alias;
+    var->type = sym->type;
+    var->prev = sym_table;
+    var->is_copy = True;
+    var->scope = curr_scope;
+    sym_table = var;
+}
+
+symrec* getsymraw(symrec* curr_var,char *name){
+    if (curr_var == NULL) return NULL;
+    if(strcmp(curr_var->name, name)==0){
+        return curr_var;
+    } else{
+        return getsymraw(curr_var->prev,name);
+    }
+}
+
+void putsym(char* name,var_type typ){
+    symrec* res = getsymraw(sym_table,name);
+    if (res == NULL || res->scope < curr_scope){
+        putsymraw(name,typ);
+    } else {
+        printf(TO_RED);
+        printf("Error: Variable redeclaration in scope\n");
+        printf(TO_NORMAL);
+        exit(EXIT_FAILURE);
+    }
+}
+
+symrec* getsym(char * name){
+    symrec* res =  getsymraw(sym_table,name);
+    if (res == NULL){
+        printf(TO_RED);
+        printf("Error: Variable not found\n");
+        printf(TO_NORMAL);
+        exit(EXIT_FAILURE);
+    }
+    if (res->scope !=curr_scope){
+        copysymtoscope(res);
+        return sym_table;
+    } else {
+        return res;
+    }
+}
 
 int main(int argc, char* argv[]) {
     yyin = stdin;
@@ -687,28 +1253,36 @@ int main(int argc, char* argv[]) {
         yyin = fopen(argv[1], "r");
         g_current_filename = argv[1];
         if(!yyin) {
-            perror(argv[1]);
+            printf("File Error: %s\n",argv[1]);
             return 1;
         }
     }
 
     // parse through the input until there is no more:
+    PRINTF("------------------------------------------------------------------\n");
+    PRINTF("LEXER OUTPUT\n");
+    PRINTF("------------------------------------------------------------------\n");
+    open_scope();
     do {
         yyparse();
     } while (!feof(yyin));
-    printf("------------------------------------------------------------------\n");
-    printf("BISON OUTPUT\n");
-    printf("------------------------------------------------------------------\n");
-    printf("True List:\n");
+    close_scope();
+    PRINTF("------------------------------------------------------------------\n");
+    PRINTF("PARSER OUTPUT\n");
+    PRINTF("------------------------------------------------------------------\n");
+    PRINTF("True List:\n");
     print_list(globaltruelist);
-    printf("False List:\n");
+    PRINTF("False List:\n");
     print_list(globalfalselist);
-    printf("Next List:\n");
+    PRINTF("Next List:\n");
     print_list(globalnextlist);
-    printf("\nGenerated IR:\n");
-    printf("%s", final_IR);
+    PRINTF("Symbol Table:\n");
+    print_symtab(final_sym_table);
+    PRINTF("\nGenerated IR:\n");
+    PRINTF("%s", final_IR);
     dump_IR(final_IR);
     dump_list(merge(merge(globalnextlist,globaltruelist),globalfalselist));
+    dump_symtab(final_sym_table);
     // Only in newer versions, apparently.
     // yylex_destroy();
 }
