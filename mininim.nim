@@ -1,10 +1,7 @@
-var a: int = 0
-var b: int = 1
-var n: int
-readInt n
-var i: int
-for i in 1..i:
-    var t:int = b
-    b = a + b
-    a = t
-    echo a
+var r2: array[2,float]
+var pi: float = 3.14159265
+for i in 0..1:
+    readFloat r2[i]
+    echo pi * r2[i] * r2[i]
+    continue
+    break

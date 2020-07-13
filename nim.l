@@ -155,8 +155,11 @@ BOOLLIT true|false
                 // PRINTF("NORMAL \n"); 
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
-<normal>{OP}        {PRINTF("OP\n");if(strcmp("$",yytext)==0){return '$';}
-                     else if(strcmp("*",yytext)==0){return '*';}
+<normal>{OP}        {   
+                     PRINTF("OP\n");
+                     if(strcmp("$",yytext)==0){return '$';}
+                     else if(strcmp("*",yytext)==0) 
+                        return '*';
                      else if(strcmp("/",yytext)==0){return '/';}
                      else if(strcmp("div",yytext)==0){return DIV;}
                      else if(strcmp("mod",yytext)==0){return MOD;}
@@ -196,6 +199,7 @@ BOOLLIT true|false
                      else if(strcmp("echo",yytext)==0){return ECHOP;}
                      else if(strcmp("readInt",yytext)==0){return RDINT;}
                      else if(strcmp("readFloat",yytext)==0){return RDFLT;}
+                     else if(strcmp("array",yytext)==0){return ARRAY;}
                     }
 
 <normal>{INTLIT}      {sscanf(yytext,"%d",&yylval.integer);PRINTF("Int\n");return INTLIT;}

@@ -1,0 +1,70 @@
+label0:
+_temp1 f=f 3.141593
+_temp2 f= _temp1
+label6:
+_temp3 = 0
+_temp4 = 1
+_temp5 = _temp3
+label5:
+if _temp4 lt _temp5 goto _bp2
+label1:
+_temp6 = _temp5
+_temp8 = 8
+_temp9 = _temp8 * _temp6
+_temp7 = _temp7 + _temp9
+fread _temp0[_temp7]
+label2:
+_temp10 f= _temp2
+_temp11 = _temp5
+_temp14 = 8
+_temp15 = _temp14 * _temp11
+_temp13 = _temp13 + _temp15
+_temp12 f= _temp0[_temp13]
+_temp16 = _temp10 f*f _temp12
+_temp17 = _temp5
+_temp20 = 8
+_temp21 = _temp20 * _temp17
+_temp19 = _temp19 + _temp21
+_temp18 f= _temp0[_temp19]
+_temp22 = _temp16 f*f _temp18
+fprint _temp22
+label3:
+goto _bp0
+label4:
+goto _bp1
+_temp5 = _temp5 + _incr
+goto label5
+label7:
+IR_END
+
+PATCH_LABELS
+
+_bp0 label4
+_bp1 label7
+_bp2 label7
+
+DATA
+
+_temp0 1 16
+_temp1 1 8
+_temp2 1 8
+_temp3 0 4
+_temp4 0 4
+_temp5 0 4
+_temp6 0 4
+_temp7 0 4
+_temp8 0 4
+_temp9 0 4
+_temp10 1 8
+_temp11 0 4
+_temp12 1 8
+_temp13 0 4
+_temp14 0 4
+_temp15 0 4
+_temp16 1 8
+_temp17 0 4
+_temp18 1 8
+_temp19 0 4
+_temp20 0 4
+_temp21 0 4
+_temp22 1 8

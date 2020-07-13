@@ -79,6 +79,7 @@ symrec* final_sym_table = NULL;
 void open_scope();
 void close_scope();
 void puttemp(char*,var_type);
+void print_symtab(symrec *);
 %}
 
 %union {
@@ -169,9 +170,9 @@ arr_deref arrd;
 %debug
 // Non-Terminals Types
 
-%type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt whileStmt breakStmt continueStmt typeDesc secVariable variable forStmt
+%type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt whileStmt breakStmt continueStmt typeDesc secVariable variable forStmt arrayDecl serVariable
 %type <idl> symbol literal identOrLiteral
-%type <arrd> arrayDeref arrayDecl
+%type <arrd> arrayDeref
 /* Grammar follows */
 
 %%
@@ -630,7 +631,7 @@ sExpr: sExpr "xor" sExpr  {
                                     printf(TO_NORMAL);
                                     exit(EXIT_FAILURE);
                                 }
-                                $$.code = scc(6, $2.code, $$.addr, " = ", opr, $2.addr, "\n");
+                                $$.code = scc(6, $2.code, $$.addr," = ", opr, $2.addr, "\n");
                                }
       | '$' sExpr {}
       | "not" sExpr {
@@ -667,9 +668,9 @@ symbol: IDENT {
               }
 ;
 
-exprList: expr comma exprList 
+/* exprList: expr comma exprList 
          | expr 
-;
+; */
 literal: BOOLLIT {$$.value.bval = $1; 
                   $$.type = BOOL_TYPE;$$.is_ident=0;}
         | INTLIT {$$.value.ival = $1; 
@@ -695,13 +696,13 @@ identOrLiteral: symbol {
                             else if($1.type==INT_TYPE){$$.value.bval=$1.value.bval;} 
                             $$.type = $1.type; $$.is_ident=0;
                          }
-               | arrayConstr 
-               | tupleConstr 
+               /* | arrayConstr  */
+               /* | tupleConstr  */
 ;
-tupleConstr: '(' exprList ')' 
+/* tupleConstr: '(' exprList ')' 
 ;
 arrayConstr: '[' exprList ']'
-;
+; */
 
 /* primarySuffix: '(' exprList ')'
               | '('')' 
@@ -709,11 +710,11 @@ arrayConstr: '[' exprList ']'
               | '.'  symbol
 ; */
 
-primarySuffix: '(' exprList ')'
+/* primarySuffix: '(' exprList ')'
               | '('')' 
-              | '.'  symbol
+              | '.'  symbol */
 ;
-ifExpr: "if" condExpr 
+/* ifExpr: "if" condExpr 
 ;
 condExpr: expr colon expr elifCondExpr 
 ;
@@ -722,36 +723,46 @@ elifCondExpr: "elif" expr colon expr elifCondExpr
 ;
 symbolCommaNoHang: symbolCommaNoHang comma symbol 
                 | symbol comma symbol
+; */
+/* declColon: symbol ':'  typeDesc
+; */
+/* inlTupleDecl: "tuple" '['   declColonCommaNoHang   ']'
+; */
+arrayDecl: "array" '['  INTLIT comma typeDesc ']' {     if ($5.aux_type == BASIC_TYPE){
+                                                            $$.arr_depth = 1;
+                                                            $$.arr_data[0] = $3;
+                                                        } else {
+                                                            $$.arr_depth = $5.arr_depth+1;
+                                                            for(int i = 1;i <= $5.arr_depth;i++) $$.arr_data[i] = $5.arr_data[i];
+                                                            $$.arr_data[0] = $3;
+                                                        }
+                                                        $$.type = $5.type;
+                                                        $$.aux_type = ARRAY_TYPE;
+                                                  }
 ;
-declColon: symbol ':'  typeDesc
-;
-inlTupleDecl: "tuple" '['   declColonCommaNoHang   ']'
-;
-arrayDecl: "array" '['  INTLIT comma typeDesc ']'
-;
-paramList: '(' declColonCommaNoHang ')' 
+/* paramList: '(' declColonCommaNoHang ')' 
           | '(' ')'
-;
-declColonCommaNoHang: declColon comma declColonCommaNoHang 
+; */
+/* declColonCommaNoHang: declColon comma declColonCommaNoHang 
                      | declColon 
-;
-paramListColon: paramList ':'  typeDesc 
+; */
+/* paramListColon: paramList ':'  typeDesc 
                | ':'  typeDesc
                |
-;
+; */
 
 /* forStmt: "for"  symbolCommaNoHang  "in" expr colonBody
         | "for"  symbol  "in" expr colonBody {}
 ; */
 
-forStmt: "for" {open_scope();}  symbol {putsym($3.value.name,INT_TYPE);} "in" expr ".." expr colonBody {
+forStmt: "for"  symbol  "in" expr ".." expr {open_scope();putsym($2.value.name,INT_TYPE);} colonBody {
                                                                           char* label = new_label();
                                                                           char* bplabel = new_bplabel();
-                                                                          symrec* sym = getsym($3.value.name);
+                                                                          symrec* sym = getsym($2.value.name);
                                                                           char* sa = sym->alias;
-                                                                          backpatch($9.nextlist, label);
-                                                                          globalnextlist = merge(globalnextlist, $9.nextlist);
-                                                                          $$.nextlist = merge($9.breaklist, create_bp(bplabel));
+                                                                          backpatch($8.nextlist, label);
+                                                                          globalnextlist = merge(globalnextlist, $8.nextlist);
+                                                                          $$.nextlist = merge($8.breaklist, create_bp(bplabel));
                                                                           $$.breaklist = NULL;
                                                                           /*
                                                                                 expr1.code
@@ -763,12 +774,12 @@ forStmt: "for" {open_scope();}  symbol {putsym($3.value.name,INT_TYPE);} "in" ex
                                                                                 sym->alias = sym->alias + _incr
                                                                                 goto label1
                                                                           */
-                                                                          $$.code = scc(22, $6.code, $8.code, sa, " = ", $6.addr,"\n", putl(label), "if ", $8.addr, " lt ", sa, " goto ",bplabel, "\n", $9.code, sa, " = ",sa," + ","_incr\ngoto ",label,"\n");
+                                                                          $$.code = scc(22, $4.code, $6.code, sa, " = ", $4.addr,"\n", putl(label), "if ", $6.addr, " lt ", sa, " goto ",bplabel, "\n", $8.code, sa, " = ",sa," + ","_incr\ngoto ",label,"\n");
                                                                           close_scope();
                                                                       }
 ;
-expr: ifExpr 
-     | sExpr {
+/* expr: ifExpr  */
+expr: sExpr {
                 $$.code = $1.code; 
                 $$.addr = $1.addr;
                 $$.type = $1.type;
@@ -776,7 +787,6 @@ expr: ifExpr
                 $$.falselist = $1.falselist;
              }
 ;
-
 arrayDeref: arrayDeref '[' expr ']' {
                                         if ($3.type != INT_TYPE) {
                                             printf(TO_RED);
@@ -784,8 +794,9 @@ arrayDeref: arrayDeref '[' expr ']' {
                                             printf(TO_NORMAL);
                                             exit(EXIT_FAILURE);
                                         }
-                                        $$.arr_size = $1.arr_size + 1;
-                                        $$.arr_data[$1.arr_size] = $3.addr; 
+                                        $$.arr_depth = $1.arr_depth + 1;
+                                        for (int i=0;i < $1.arr_depth; i++) $$.arr_data[i] = $1.arr_data[i];
+                                        $$.arr_data[$1.arr_depth] = $3.addr;
                                         $$.code = scc(2,$1.code, $3.code);
                                     }
           |'[' expr ']' {
@@ -795,13 +806,13 @@ arrayDeref: arrayDeref '[' expr ']' {
                                 printf(TO_NORMAL);
                                 exit(EXIT_FAILURE);
                             }
-                            $$.arr_size = 1;
+                            $$.arr_depth = 1;
                             $$.arr_data[0] = $2.addr; 
                             $$.code = $2.code;
                         }
 ;
-primary: identOrLiteral primary2 
-        | identOrLiteral {
+/* primary: identOrLiteral primary2  */
+primary: identOrLiteral {
                             $$.addr = new_temp();
                             $$.truelist = NULL;
                             $$.falselist = NULL; 
@@ -809,7 +820,18 @@ primary: identOrLiteral primary2
                                 symrec* symb = getsym($1.value.name);
                                 puttemp($$.addr,symb->type);
                                 $$.type = symb->type;
-                                $$.code = scc(4, $$.addr, " = ", symb->alias, "\n");
+                                char *opr;
+                                if (symb->type == INT_TYPE){
+                                    opr = " = ";
+                                } else if(symb->type == FLOAT_TYPE){
+                                    opr = " f= ";
+                                } else {
+                                    printf(TO_RED);
+                                    printf("Error: Symbols type not currently supported in expression\n");
+                                    printf(TO_NORMAL);
+                                    exit(EXIT_FAILURE);
+                                }
+                                $$.code = scc(4, $$.addr, opr, symb->alias, "\n");
                             } 
                             else if($1.type==INT_TYPE){
                                 puttemp($$.addr,INT_TYPE);
@@ -856,35 +878,96 @@ primary: identOrLiteral primary2
                                         $$.truelist = NULL;
                                         $$.falselist = NULL;
                                         if($1.is_ident){
-                                            
+                                            symrec * symb = getsym($1.value.name);
+                                            if (symb->aux_type != ARRAY_TYPE){
+                                                printf(TO_RED);
+                                                printf("Error: Cannot dereference something which is not an array\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);    
+                                            } else if (symb->arr_depth != $2.arr_depth){
+                                                printf(TO_RED);
+                                                printf("Error: Array not fully dereferenced\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);   
+                                            } else {
+                                                puttemp($$.addr,symb->type);
+                                                $$.type = symb->type;
+                                                int type_width;
+                                                if (symb->type == FLOAT_TYPE){
+                                                    type_width = 8;
+                                                } else {
+                                                    type_width = 4;
+                                                }
+                                                int type_widths[10];
+                                                type_widths[$2.arr_depth-1] = type_width;
+                                                char type_widths_str[10][10];
+                                                sprintf(type_widths_str[$2.arr_depth-1], "%d", type_widths[$2.arr_depth-1]);
+                                                for(int i=$2.arr_depth-2;i>=0;i--){
+                                                    type_widths[i] = type_widths[i+1]*symb->arr_data[i+1];
+                                                    sprintf(type_widths_str[i], "%d", type_widths[i]);
+                                                }
+                                                $$.code = $2.code;
+                                                char* ind = new_temp();
+                                                puttemp(ind, INT_TYPE);
+                                                for(int i=0; i<$2.arr_depth; i++){
+                                                    char* temp1 = new_temp();
+                                                    char* temp2 = new_temp();
+                                                    puttemp(temp1,INT_TYPE);
+                                                    puttemp(temp2,INT_TYPE);
+                                                    $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $2.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
+                                                   /*
+                                                        type_widths: (symb->arr_data reverse prefix product) * typewidth
+                                                        for []
+                                                        temp += type_widths[i]*$2.arr_data[i] 
+                                                   */
+                                                }
+                                                char * opr;
+                                                if(symb->type == INT_TYPE){
+                                                    opr = " = ";
+                                                } else if (symb->type == FLOAT_TYPE){
+                                                    opr = " f= ";
+                                                }
+                                                $$.code = scc(7, $$.code, $$.addr,opr,symb->alias,"[", ind, "]\n");
+                                            }
+                                        }
+                                        else {
+                                            printf(TO_RED);
+                                            printf("Error: Dereferencing literal not of 'array' type\n");
+                                            printf(TO_NORMAL);
+                                            exit(EXIT_FAILURE);
                                         }
                                     }
 ;
-primary2: primary2 primarySuffix
+/* primary2: primary2 primarySuffix
          | primarySuffix
-;
-typeDesc: symbol { 
+; */
+typeDesc: symbol {  $$.aux_type = BASIC_TYPE;
                     if(strcmp($1.value.name, "int")==0){
                         $$.type = INT_TYPE;
                     } else if (strcmp($1.value.name, "float")==0){
                         $$.type = FLOAT_TYPE;
                     } else {
                         printf(TO_RED);
-                        printf("Error: Unknown type assigned to variable.\n");
+                        printf("Error: Unknown type assigned to variable\n");
                         printf(TO_NORMAL);
                         exit(EXIT_FAILURE);
                     }
                 } 
-         | inlTupleDecl 
-         | arrayDecl
+         /* | inlTupleDecl  */
+         | arrayDecl {
+                        $$.aux_type = ARRAY_TYPE;
+                        $$.type = $1.type;
+                        $$.arr_depth = $1.arr_depth;
+                        for(int i=0;i<$1.arr_depth;i++) $$.arr_data[i] = $1.arr_data[i];
+                     }
 ;
 // typeDesc: symbol 
 //          | enum 
 //          | inlTupleDecl 
 //          | arrayDecl
 // ;
-exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
-         | symbol '=' expr  {
+/* exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;} */
+exprStmt: symbol '=' expr  {
                                 char* opr;
                                 symrec * symb = getsym($1.value.name);
                                 if ($3.type == INT_TYPE && symb->type == FLOAT_TYPE){
@@ -896,13 +979,84 @@ exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
                                 }
                                 else {
                                     printf(TO_RED);
-                                    printf("Error: Type assigned to variable.\n");
+                                    printf("Error: Incompatible type assigned to variable.\n");
                                     printf(TO_NORMAL);
                                     exit(EXIT_FAILURE);
                                 }
                                 $$.code = scc(5, $3.code, symb->alias, opr, $3.addr, "\n"); 
                                 $$.nextlist = NULL;
                             }
+         | symbol arrayDeref '=' expr {   
+                                            $$.truelist = NULL;
+                                            $$.falselist = NULL;
+                                            if($1.is_ident){
+                                                symrec * symb = getsym($1.value.name);
+                                                if (symb->aux_type != ARRAY_TYPE){
+                                                    printf(TO_RED);
+                                                    printf("Error: Cannot dereference something which is not an array\n");
+                                                    printf(TO_NORMAL);
+                                                    exit(EXIT_FAILURE);    
+                                                } else if (symb->arr_depth != $2.arr_depth){
+                                                    printf(TO_RED);
+                                                    printf("Error: Array not fully dereferenced\n");
+                                                    printf(TO_NORMAL);
+                                                    exit(EXIT_FAILURE);   
+                                                } else {
+                                                    int type_width;
+                                                    if (symb->type == FLOAT_TYPE){
+                                                        type_width = 8;
+                                                    } else {
+                                                        type_width = 4;
+                                                    }
+                                                    int type_widths[10];
+                                                    type_widths[$2.arr_depth-1] = type_width;
+                                                    char type_widths_str[10][10];
+                                                    sprintf(type_widths_str[$2.arr_depth-1], "%d", type_widths[$2.arr_depth-1]);
+                                                    for(int i=$2.arr_depth-2;i>=0;i--){
+                                                        type_widths[i] = type_widths[i+1]*symb->arr_data[i+1];
+                                                        sprintf(type_widths_str[i], "%d", type_widths[i]);
+                                                    }
+                                                    $$.code = $2.code;
+                                                    char* ind = new_temp();
+                                                    puttemp(ind, INT_TYPE);
+                                                    for(int i=0; i<$2.arr_depth; i++){
+                                                        char* temp1 = new_temp();
+                                                        char* temp2 = new_temp();
+                                                        puttemp(temp1,INT_TYPE);
+                                                        puttemp(temp2,INT_TYPE);
+                                                        $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $2.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
+                                                       /*
+                                                            type_widths: (symb->arr_data reverse prefix product) * typewidth
+                                                            for []
+                                                            temp += type_widths[i]*$2.arr_data[i] 
+                                                       */
+                                                    }
+                                                    char* opr;
+                                                    if ($4.type == INT_TYPE && symb->type == FLOAT_TYPE){
+                                                        opr = " =f ";
+                                                    } else if ($4.type == INT_TYPE && symb->type == INT_TYPE){
+                                                        opr = " = ";
+                                                    } else if (symb->type == FLOAT_TYPE && $4.type == FLOAT_TYPE){
+                                                        opr = " f= ";
+                                                    }
+                                                    else {
+                                                        printf(TO_RED);
+                                                        printf("Error: Incompatible Type assigned to variable.\n");
+                                                        printf(TO_NORMAL);
+                                                        exit(EXIT_FAILURE);
+                                                    }
+                                                    $$.code = scc(9,$$.code,$4.code, symb->alias,"[", ind, "]", opr, $4.addr, "\n"); 
+                                                    $$.nextlist = NULL;
+                                                }
+                                            }
+                                            else {
+                                                printf(TO_RED);
+                                                printf("Error: Dereferencing literal not of 'array' type\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);
+                                            }
+                                           
+                                      }
          | symbol "+=" expr {}
          | symbol "*=" expr {}
 ;
@@ -911,9 +1065,9 @@ exprStmt: sExpr {$$.code = $1.code; $$.nextlist = NULL;}
 //          | symbol "+=" expr
 //          | symbol "*=" expr
 // ;
-returnStmt: "return" expr 
+/* returnStmt: "return" expr 
            | "return"
-;
+; */
 breakStmt: "break" {
                         char *bplabel = new_bplabel();
                         $$.breaklist = create_bp(bplabel);
@@ -971,43 +1125,75 @@ whileStmt: "while" expr colonBody {
                                       $$.code = scc(7,putl(label1),$2.code,putl(label2),$3.code,"goto ",label1,"\n");
                                   }
 ;
-routine:  symbol paramListColon '=' stmt 
+/* routine:  symbol paramListColon '=' stmt 
         | symbol paramListColon
-;
+; */
 // enum: "enum"  symbolCommaNoHang
 //         | "enum" symbol
 // ;
-typeDef: symbol '='  typeDesc
-;
+/* typeDef: symbol '='  typeDesc
+; */
 // varTuple: "("  symbolCommaNoHang ")" "="  expr
 //         | "("  symbol ")" "="  expr
 // ;
-colonBody: colon {open_scope();} stmt { close_scope();$$.code = $3.code; $$.nextlist = $3.nextlist; $$.breaklist = $3.breaklist;}
+colonBody: colon {open_scope();} stmt {close_scope();$$.code = $3.code; $$.nextlist = $3.nextlist; $$.breaklist = $3.breaklist;}
 ;
 // variable: varTuple 
 //          | declColon "=" expr 
 //          | declColon
 // ;
 variable: symbol ':'  typeDesc '=' expr {
+                                            if ($3.aux_type == BASIC_TYPE) {
                                             $$.nextlist = NULL; $$.breaklist = NULL;
                                             putsym($1.value.name,$3.type);
                                             symrec * symb = getsym($1.value.name);
-                                            $$.code = scc(5, $5.code, symb->alias, " = ", $5.addr,"\n");
+                                            char * opr;
+                                            if ($5.type == INT_TYPE && symb->type == FLOAT_TYPE){
+                                                opr = " =f ";
+                                            } else if ($5.type == INT_TYPE && symb->type == INT_TYPE){
+                                                opr = " = ";
+                                            } else if (symb->type == FLOAT_TYPE && $5.type == FLOAT_TYPE){
+                                                opr = " f= ";
+                                            }
+                                            else {
+                                                printf(TO_RED);
+                                                printf("Error: Incompatible Type assigned to variable.\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);
+                                            }
+                                            $$.code = scc(5, $5.code, symb->alias, opr, $5.addr,"\n");
+                                            }else{
+                                                printf(TO_RED);
+                                                printf("Error: Assignment to expression with 'array' type.\n");
+                                                printf(TO_NORMAL);
+                                                exit(EXIT_FAILURE);
+                                            }
                                         }
          | symbol ':'  typeDesc {
-                                    putsym($1.value.name,$3.type);
-                                    $$.nextlist = NULL; $$.breaklist = NULL; 
-                                    $$.code="";
+                                    if($3.aux_type == BASIC_TYPE){
+                                        putsym($1.value.name,$3.type);
+                                        $$.nextlist = NULL; $$.breaklist = NULL; 
+                                        $$.code = "";
+                                    }
+                                    else{
+                                        putsym($1.value.name, $3.type);
+                                        symrec *symb = getsym($1.value.name);
+                                        symb->aux_type = ARRAY_TYPE;
+                                        symb->arr_depth = $3.arr_depth;
+                                        for (int i=0; i<$3.arr_depth; i++) symb->arr_data[i] = $3.arr_data[i];
+                                        $$.nextlist = NULL; $$.breaklist = NULL; 
+                                        $$.code = "";
+                                    }
                                 }
 ;
-secVariable: variable {$$.code = $1.code; $$.nextlist=$1.nextlist; $$.breaklist = $1.breaklist;}
-            | INDG variable serVariable DED
+secVariable: variable {$$.code = $1.code; $$.nextlist=NULL; $$.breaklist = NULL;}
+            | INDG variable serVariable DED { $$.code = scc(2,$2.code,$3.code);$$.nextlist = NULL; $$.breaklist = NULL;}
 ;
-serVariable: INDEQ variable serVariable 
-            | 
+serVariable: serVariable INDEQ variable  {$$.code = scc(2,$1.code, $3.code);$$.nextlist = NULL; $$.breaklist = NULL;}
+            | {$$.code = "", $$.nextlist = NULL; $$.breaklist = NULL;}
 ;
-simpleStmt: returnStmt 
-            | breakStmt {
+/* simpleStmt: returnStmt */
+simpleStmt: breakStmt {
                             $$.nextlist = $1.nextlist;
                             $$.breaklist = $1.breaklist;
                             $$.code = $1.code;
@@ -1021,9 +1207,8 @@ simpleStmt: returnStmt
 ;
 complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
                     | whileStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
-                    | forStmt
+                    | forStmt 
                     | "echo" expr { 
-                                        PRINTF("Idhar Aaya?\n");
                                         char * opr;
                                         if($2.type == INT_TYPE){
                                             opr = "iprint ";
@@ -1040,8 +1225,8 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                         $$.nextlist = NULL; $$.breaklist = NULL;
                                         $$.code = scc(4,$2.code, opr ,$2.addr,"\n");
                                     }
-                    | "proc" routine
-                    | "type" typeDef
+                    /* | "proc" routine
+                    | "type" typeDef */
                     | "var" secVariable {$$.code = $2.code; $$.nextlist = $2.nextlist; $$.breaklist = $2.breaklist;}
                     | "readInt" symbol {
                                             symrec * symb = getsym($2.value.name);
@@ -1054,6 +1239,59 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                             $$.nextlist = NULL; $$.breaklist = NULL;
                                             $$.code  = scc(3,"iread ",symb->alias,"\n");
                                        }
+                    | "readInt" symbol arrayDeref {
+                                                      symrec * symb = getsym($2.value.name);
+                                                      if (symb->aux_type != ARRAY_TYPE){
+                                                          printf(TO_RED);
+                                                          printf("Error: Cannot dereference something which is not an array\n");
+                                                          printf(TO_NORMAL);
+                                                          exit(EXIT_FAILURE);    
+                                                      } else if (symb->arr_depth != $3.arr_depth){
+                                                          printf(TO_RED);
+                                                          printf("Error: Array not fully dereferenced\n");
+                                                          printf(TO_NORMAL);
+                                                          exit(EXIT_FAILURE);   
+                                                      } else {
+                                                          int type_width;
+                                                          if (symb->type == FLOAT_TYPE){
+                                                              type_width = 8;
+                                                          } else {
+                                                              type_width = 4;
+                                                          }
+                                                          int type_widths[10];
+                                                          type_widths[$3.arr_depth-1] = type_width;
+                                                          char type_widths_str[10][10];
+                                                          sprintf(type_widths_str[$3.arr_depth-1], "%d", type_widths[$3.arr_depth-1]);
+                                                          for(int i=$3.arr_depth-2;i>=0;i--){
+                                                              type_widths[i] = type_widths[i+1]*symb->arr_data[i+1];
+                                                              sprintf(type_widths_str[i], "%d", type_widths[i]);
+                                                          }
+                                                          $$.code = $3.code;
+                                                          char* ind = new_temp();
+                                                          puttemp(ind, INT_TYPE);
+                                                          for(int i=0; i<$3.arr_depth; i++){
+                                                              char* temp1 = new_temp();
+                                                              char* temp2 = new_temp();
+                                                              puttemp(temp1,INT_TYPE);
+                                                              puttemp(temp2,INT_TYPE);
+                                                              $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $3.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
+                                                             /*
+                                                                  type_widths: (symb->arr_data reverse prefix product) * typewidth
+                                                                  for []
+                                                                  temp += type_widths[i]*$2.arr_data[i] 
+                                                             */
+                                                          }
+                                                          if (symb->type != INT_TYPE){
+                                                              printf(TO_RED);
+                                                              printf("Error: Invalid type for 'readInt'\n");
+                                                              printf(TO_NORMAL);
+                                                              exit(EXIT_FAILURE);
+                                                          }
+                                                          $$.nextlist = NULL; $$.breaklist = NULL;
+                                                          $$.code  = scc(6,$$.code,"iread ",symb->alias,"[", ind, "]\n");
+                                                      }
+                                                      
+                                                  }
                     | "readFloat" symbol {
                                             symrec * symb = getsym($2.value.name);
                                             if (symb->type != FLOAT_TYPE){
@@ -1065,6 +1303,58 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                             $$.nextlist = NULL; $$.breaklist = NULL;
                                             $$.code  = scc(3,"fread ",symb->alias,"\n");
                                         }
+                    | "readFloat" symbol arrayDeref {
+                                                        symrec * symb = getsym($2.value.name);
+                                                        if (symb->aux_type != ARRAY_TYPE){
+                                                            printf(TO_RED);
+                                                            printf("Error: Cannot dereference something which is not an array\n");
+                                                            printf(TO_NORMAL);
+                                                            exit(EXIT_FAILURE);    
+                                                        } else if (symb->arr_depth != $3.arr_depth){
+                                                            printf(TO_RED);
+                                                            printf("Error: Array not fully dereferenced\n");
+                                                            printf(TO_NORMAL);
+                                                            exit(EXIT_FAILURE);   
+                                                        } else {
+                                                            int type_width;
+                                                            if (symb->type == FLOAT_TYPE){
+                                                                type_width = 8;
+                                                            } else {
+                                                                type_width = 4;
+                                                            }
+                                                            int type_widths[10];
+                                                            type_widths[$3.arr_depth-1] = type_width;
+                                                            char type_widths_str[10][10];
+                                                            sprintf(type_widths_str[$3.arr_depth-1], "%d", type_widths[$3.arr_depth-1]);
+                                                            for(int i=$3.arr_depth-2;i>=0;i--){
+                                                                type_widths[i] = type_widths[i+1]*symb->arr_data[i+1];
+                                                                sprintf(type_widths_str[i], "%d", type_widths[i]);
+                                                            }
+                                                            $$.code = $3.code;
+                                                            char* ind = new_temp();
+                                                            puttemp(ind, INT_TYPE);
+                                                            for(int i=0; i<$3.arr_depth; i++){
+                                                                char* temp1 = new_temp();
+                                                                char* temp2 = new_temp();
+                                                                puttemp(temp1,INT_TYPE);
+                                                                puttemp(temp2,INT_TYPE);
+                                                                $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $3.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
+                                                               /*
+                                                                    type_widths: (symb->arr_data reverse prefix product) * typewidth
+                                                                    for []
+                                                                    temp += type_widths[i]*$2.arr_data[i] 
+                                                               */
+                                                            }
+                                                            if (symb->type != FLOAT_TYPE){
+                                                                printf(TO_RED);
+                                                                printf("Error: Invalid type for 'readFloat'\n");
+                                                                printf(TO_NORMAL);
+                                                                exit(EXIT_FAILURE);
+                                                            }
+                                                            $$.nextlist = NULL; $$.breaklist = NULL;
+                                                            $$.code  = scc(6,$$.code,"fread ",symb->alias,"[", ind, "]\n");
+                                                        }
+                                                    }
                     | simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;$$.breaklist = $1.breaklist;}
 ;
 stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
@@ -1172,7 +1462,15 @@ void dump_list(bp_node* l){
 
 void dump_symtab_helper(FILE* fptr, symrec* table){
     if(table==NULL) return;
-    fprintf(fptr, "%s %d %d\n",table->alias,table->type, table->type*4 + 4);
+    if (table->aux_type == BASIC_TYPE){
+        fprintf(fptr, "%s %d %d\n",table->alias,table->type, table->type*4 + 4);
+    } else {
+        int width = table->type*4 + 4;
+        for(int i=0;i<table->arr_depth;i++){
+            width*=table->arr_data[i];
+        }
+        fprintf(fptr, "%s %d %d\n",table->alias,table->type, width);
+    }
     dump_symtab_helper(fptr,table->prev);    
 }
 
@@ -1188,7 +1486,16 @@ void dump_symtab(symrec *table){
 void print_symtab(symrec *table){
     if (table == NULL) return;
     char s[5][10] = {"INT","FLOAT","BOOL","STR","CHAR"};
-    PRINTF("%s    %s\n",table->alias,s[table->type]);
+    if(table->aux_type == BASIC_TYPE){
+        PRINTF("%s    %s\n",table->alias,s[table->type]);
+    } else {
+        PRINTF("%s    %s    ",table->alias,s[table->type]);
+        PRINTF("ARRAY");
+        for(int i=0;i<table->arr_depth;i++){
+            PRINTF("[%d]", table->arr_data[i]);
+        }
+        PRINTF("\n");
+    }
     print_symtab(table->prev);
 }
 
@@ -1221,6 +1528,7 @@ void putsymraw(char* name,var_type typ){
     var->name = name;
     var->alias = new_temp();
     var->type = typ;
+    var->aux_type = BASIC_TYPE;
     var->is_copy = False;
     var->prev = sym_table;
     var->scope = curr_scope;
@@ -1232,6 +1540,7 @@ void puttemp(char* temp_name,var_type typ){
     var->name = "";
     var->alias = temp_name;
     var->type = typ;
+    var->aux_type = BASIC_TYPE;
     var->is_copy = False;
     var->prev = sym_table;
     var->scope = curr_scope;
@@ -1243,6 +1552,9 @@ void copysymtoscope(symrec* sym){
     var->name = sym->name;
     var->alias = sym->alias;
     var->type = sym->type;
+    var->aux_type = sym->aux_type;
+    var->arr_depth = sym->arr_depth;
+    for(int i=0;i< sym->arr_depth;i++) var->arr_data[i] = sym->arr_data[i];
     var->prev = sym_table;
     var->is_copy = True;
     var->scope = curr_scope;
@@ -1274,7 +1586,7 @@ symrec* getsym(char * name){
     symrec* res =  getsymraw(sym_table,name);
     if (res == NULL){
         printf(TO_RED);
-        printf("Error: Variable not found\n");
+        printf("Error: Variable '%s' not found\n", name);
         printf(TO_NORMAL);
         exit(EXIT_FAILURE);
     }
