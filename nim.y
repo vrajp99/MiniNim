@@ -89,6 +89,7 @@ char ch;
 idorlit idl;
 // symrec  *tptr;   /* For returning symbol-table pointers      */
 sdd s_tree;
+arr_deref arrd;
 }
 
 %token <integer> INTLIT
@@ -170,7 +171,7 @@ sdd s_tree;
 
 %type <s_tree> module complexOrSimpleStmt module2 sExpr primary simpleStmt expr exprStmt ifStmt stmt colonBody stmt2 elifCondStmt whileStmt breakStmt continueStmt typeDesc secVariable variable forStmt
 %type <idl> symbol literal identOrLiteral
-
+%type <arrd> arrayDeref arrayDecl
 /* Grammar follows */
 
 %%
@@ -686,6 +687,7 @@ identOrLiteral: symbol {
                             $$.is_ident = 1;
                        }
                | literal {
+                            $$.aux_type = BASIC_TYPE;
                             if($1.type==INT_TYPE){$$.value.ival=$1.value.ival;} 
                             else if($1.type==FLOAT_TYPE){$$.value.fval=$1.value.fval;} 
                             else if($1.type==CHAR_TYPE){$$.value.cval=$1.value.cval;} 
@@ -693,16 +695,22 @@ identOrLiteral: symbol {
                             else if($1.type==INT_TYPE){$$.value.bval=$1.value.bval;} 
                             $$.type = $1.type; $$.is_ident=0;
                          }
-               | arrayConstr  
+               | arrayConstr 
                | tupleConstr 
 ;
 tupleConstr: '(' exprList ')' 
 ;
 arrayConstr: '[' exprList ']'
 ;
-primarySuffix: '(' exprList ')'
+
+/* primarySuffix: '(' exprList ')'
               | '('')' 
               | '['  expr  ']' 
+              | '.'  symbol
+; */
+
+primarySuffix: '(' exprList ')'
+              | '('')' 
               | '.'  symbol
 ;
 ifExpr: "if" condExpr 
@@ -768,6 +776,30 @@ expr: ifExpr
                 $$.falselist = $1.falselist;
              }
 ;
+
+arrayDeref: arrayDeref '[' expr ']' {
+                                        if ($3.type != INT_TYPE) {
+                                            printf(TO_RED);
+                                            printf("Error: Array index should be of type 'int'\n");
+                                            printf(TO_NORMAL);
+                                            exit(EXIT_FAILURE);
+                                        }
+                                        $$.arr_size = $1.arr_size + 1;
+                                        $$.arr_data[$1.arr_size] = $3.addr; 
+                                        $$.code = scc(2,$1.code, $3.code);
+                                    }
+          |'[' expr ']' {
+                            if ($2.type != INT_TYPE) {
+                                printf(TO_RED);
+                                printf("Error: Array index should be of type 'int'\n");
+                                printf(TO_NORMAL);
+                                exit(EXIT_FAILURE);
+                            }
+                            $$.arr_size = 1;
+                            $$.arr_data[0] = $2.addr; 
+                            $$.code = $2.code;
+                        }
+;
 primary: identOrLiteral primary2 
         | identOrLiteral {
                             $$.addr = new_temp();
@@ -818,9 +850,17 @@ primary: identOrLiteral primary2
                                 // $$.code = scc(4, $$.addr, " = ", boolean[$1.value.bval], "\n"));
                                 $$.code = scc(7, "goto ", bplabel, "\n", $$.addr, " = ", boolean[$1.value.bval], "\n");
                             }
-                         }
+                        }
+        | identOrLiteral arrayDeref {
+                                        $$.addr = new_temp();
+                                        $$.truelist = NULL;
+                                        $$.falselist = NULL;
+                                        if($1.is_ident){
+                                            
+                                        }
+                                    }
 ;
-primary2: primarySuffix primary2 
+primary2: primary2 primarySuffix
          | primarySuffix
 ;
 typeDesc: symbol { 
