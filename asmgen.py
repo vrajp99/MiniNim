@@ -1,6 +1,7 @@
 const = -1
 # int, float, bool, str, char = 0,1,2,3,4
 def gen_const():
+    global const
     const+=1
     return "_const%d"%const
 
@@ -31,6 +32,7 @@ def get_IR():
                 name, typ, size = line.strip().split()
                 vars[name] = var(name, int(typ), size)
             line = f.readline()
+    print(patches)
     for bplab in patches:
         IR = IR.replace(bplab+"\n", patches[bplab]+"\n")
     
@@ -38,21 +40,26 @@ def get_IR():
 
 # Begin Macros
 def asmd(a,b,c,op,oper,sym):
-    code = ""
     if op == sym:
         if sym=="/":
             return "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tlw $t1, %s\n\tmtc1 $t1, $f4\n\tcvt.d.w $f4, $f4\n\t%s.d $f6, $f2, $f4\n\tsdc1 $f6, %s\n"%(b.name,c.name,oper, a.name)
         return "lw $t0, %s\n\tlw $t1, %s\n\t%s $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,oper,a.name)
     if op[0] == "f":
-        code += "ldc1 $f2, %s\n\t"%b.name
+        code = "ldc1 $f2, %s\n\t"%b.name
     else:
-        code += "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\t"%b.name
+        code = "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\t"%b.name
     if op[-1]== "f":
         code += "ldc1 $f4, %s\n\t"%c.name
     else:
         code += "lw $t1, %s\n\tmtc1 $t1, $f4\n\tcvt.d.w $f4, $f4\n\t"%c.name
     code += "%s.d $f6, $f2, $f4\n\tsdc1 $f6, %s\n"%(oper, a.name)
     return code
+
+def uminus(a,b,op):
+    if op == "-":
+        return "lw $t0, %s\n\tsub $t1, $zero, $t0\n\tsw $t1, %s\n"%(b.name,a.name)
+    else:
+        return "ldc1 $f0, _zero\n\tldc1 $f2, %s\n\tsub $f4, $f0, $f2\n\tsdc1 $f4, %s\n"%(b.name,a.name)
 
 def if_(a,b,label,op,sym):
     code = ""
@@ -77,16 +84,27 @@ def printt(a,op):
 
 def inputt(a,op):
     if op=="f":
-        return "li $v0, 7\n\tsyscall\n\tsdc1 $f0, %s\n"%a
+        if "[" in a:
+            return "lw $t0, %s\n\tli $v0, 7\n\tsyscall\n\tsdc1 $f0, %s($t0)\n"%(a[a.find("[")+1:a.find("]")], a[:a.find("[")])
+        else:
+            return "li $v0, 7\n\tsyscall\n\tsdc1 $f0, %s\n"%a
     else:
-        return "li $v0,5\n\tsyscall\n\tsw $v0, %s\n"%a
-
+        if "[" in a:
+            return "lw $t0, %s\n\tli $v0,5\n\tsyscall\n\tsw $v0, %s($t0)\n"%(a[a.find("[")+1:a.find("]")], a[:a.find("[")])
+        else:
+            return "li $v0,5\n\tsyscall\n\tsw $v0, %s\n"%a
 
 idiv = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
 mod = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t0, $t1\n\tmfhi $t2\n\tsw $t2, %s\n"%(a.name,b.name,c.name)
 assignfi = lambda a,b: "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b.name,a.name)
 assignii = lambda a,b: "lw $t0, %s\n\tsw $t0, %s\n"%(b.name, a.name)
 assignff = lambda a,b: loadf(a,b.name)
+arrassignfi = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s\n\tmtc1 $t1, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s($t0)\n"%(ind,b.name,a.name)
+arrassignii = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s\n\tsw $t1, %s($t0)\n"%(ind, b.name, a.name)
+arrassignff = lambda a,ind,b: "lw $t0, %s\n\tldc1 $f2, %s\n\tsdc1 $f2, %s($t0)\n"%(b,a.name)
+assignfiarr = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s($t0)\n\tmtc1 $t1, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(ind, b.name,a.name)
+assigniiarr = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s($t0)\n\tsw $t1, %s\n"%(ind, b.name, a.name)
+assignffarr = lambda a,ind,b: "lw $t0, %s\n\tldc1 $f2, %s($t0)\n\tsdc1 $f2, %s\n"%(ind, b.name, a.name)
 loadif = lambda a,b: "li $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b,a.name)
 loadf = lambda a,b: "ldc1 $f2, %s\n\tsdc1 $f2, %s\n"%(b,a.name)
 loadi = lambda a,b: "li $t0, %s\n\tsw $t0, %s\n"%(b,a.name)
@@ -111,24 +129,43 @@ def gen_asm(IR, vars):
         elif len(atr)==3 and ("=" in atr[1]):
             if atr[2][0]!="_":
                 v1 = vars[atr[0]]
-                if atr[1][-1]=="f":
-                    text += "\t" + loadif(v1,atr[2])
-                    data += "\t" + atr[0] + ": .space 8\n"
-                elif atr[1][0]=="f":
+                if atr[1][0]=="f":
                     cons = gen_const()
                     data += "\t" + cons + ": .double " + atr[2] + "\n"
                     text += "\t" + loadf(v1, cons)
+                    data += "\t" + atr[0] + ": .space 8\n"
                 else:
                     text += "\t" + loadi(v1, atr[2])
-                    data += "\t" + atr[0] + ": .space 4\n"
+                    data += "\t" + atr[0] + ": .space 4\n\t.align 4\n"
                 done.add(atr[0])
             else:
-                if atr[1][-1]=="f":
-                    text += "\t" + assignfi(vars[atr[0]], vars[atr[2]])
-                elif atr[1][0]=="f":
-                    text += "\t" + assignff(vars[atr[0]], vars[atr[2]])
+                if "[" in atr[0]:
+                    ind = atr[0][atr[0].find("[")+1:atr[0].find("]")]
+                    arr = atr[0][:atr[0].find("[")]  
+                    if atr[1][-1]=="f":
+                        text += "\t" + arrassignfi(vars[arr], ind, vars[atr[2]])
+                    elif atr[1][0]=="f":
+                        text += "\t" + arrassignff(vars[arr], ind, vars[atr[2]])
+                    else:
+                        text += "\t" + arrassignii(vars[arr], ind, vars[atr[2]])
+                elif "[" in atr[2]:
+                    ind = atr[2][atr[2].find("[")+1:atr[2].find("]")]
+                    arr = atr[2][:atr[2].find("[")]
+                    if atr[1][-1]=="f":
+                        text += "\t" + assignfiarr(vars[atr[0]], ind, vars[arr])
+                    elif atr[1][0]=="f":
+                        text += "\t" + assignffarr(vars[atr[0]], ind, vars[arr])
+                    else:
+                        text += "\t" + assigniiarr(vars[atr[0]], ind, vars[arr])
                 else:
-                    text += "\t" + assignii(vars[atr[0]], vars[atr[2]])
+                    if atr[1][-1]=="f":
+                        text += "\t" + assignfi(vars[atr[0]], vars[atr[2]])
+                    elif atr[1][0]=="f":
+                        text += "\t" + assignff(vars[atr[0]], vars[atr[2]])
+                    else:
+                        text += "\t" + assignii(vars[atr[0]], vars[atr[2]])
+        elif len(atr)==4 and ("=" in atr[1]):
+            text += "\t" + uminus(atr[0], atr[3],atr[2])
         elif len(atr)==5 and ("=" in atr[1]):
             if "+" in atr[3]:
                 text += "\t"+ asmd(vars[atr[0]], vars[atr[2]], vars[atr[4]], atr[3],"add","+")
@@ -148,6 +185,8 @@ def gen_asm(IR, vars):
     for ident in vars:
         if ident not in done:
             data += "\t" + ident +": .space "+ vars[ident].size +"\n"
+            if int(vars[ident].size)%8:
+                data += "\t.align " + str(8 - int(vars[ident].size)%8) + "\n"
     return data + "\n" + text
 
 def dump_file(code, name):
