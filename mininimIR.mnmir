@@ -1,70 +1,76 @@
+_temp1 = 1
+_temp2 = _temp1
+_temp3 = 1
+_temp4 = _temp3
 label0:
-_temp1 f=f 3.141593
-_temp2 f= _temp1
-label7:
-_temp3 = 0
-_temp4 = 1
-_temp5 = _temp3
-label5:
-if _temp4 lt _temp5 goto _bp2
+_temp5 s=s "Program to print factorial of all numbers <= n"
+sprint _temp5
+printnl
 label1:
-_temp6 = _temp5
-_temp8 = 8
-_temp9 = _temp8 * _temp6
-_temp7 = _temp7 + _temp9
-fread _temp0[_temp7]
+_temp6 s=s "Enter value of n:"
+sprint _temp6
+printnl
 label2:
-_temp10 f= _temp2
-_temp11 = _temp5
-_temp14 = 8
-_temp15 = _temp14 * _temp11
-_temp13 = _temp13 + _temp15
-_temp12 f= _temp0[_temp13]
-_temp16 = _temp10 f*f _temp12
-_temp17 = _temp5
-_temp20 = 8
-_temp21 = _temp20 * _temp17
-_temp19 = _temp19 + _temp21
-_temp18 f= _temp0[_temp19]
-_temp22 = _temp16 f*f _temp18
-fprint _temp22
-label3:
-goto _bp0
-label4:
+iread _temp0
+label9:
+label7:
+_temp7 = _temp0
+_temp8 = 0
+if _temp8 lt _temp7 goto _bp0
 goto _bp1
-label6:
-_temp5 = _temp5 + _incr
-goto label5
 label8:
+label3:
+_temp9 = _temp4
+_temp10 = _temp2
+_temp11 = _temp9 * _temp10
+_temp2 = _temp11
+label4:
+_temp12 = _temp4
+iprint _temp12
+_temp13 s=s "! = "
+sprint _temp13
+_temp14 = _temp2
+iprint _temp14
+printnl
+label5:
+_temp15 = _temp4
+_temp16 = 1
+_temp17 = _temp15 + _temp16
+_temp4 = _temp17
+label6:
+_temp18 = _temp0
+_temp19 = 1
+_temp20 = _temp18 - _temp19
+_temp0 = _temp20
+goto label7
+label10:
 IR_END
 
 PATCH_LABELS
 
-_bp1 label8
-_bp2 label8
+_bp1 label10
+_bp0 label8
 
 DATA
 
-_temp0 1 16
-_temp1 1 8
-_temp2 1 8
+_temp0 0 4
+_temp1 0 4
+_temp2 0 4
 _temp3 0 4
 _temp4 0 4
-_temp5 0 4
-_temp6 0 4
+_temp5 3 49
+_temp6 3 20
 _temp7 0 4
 _temp8 0 4
 _temp9 0 4
-_temp10 1 8
+_temp10 0 4
 _temp11 0 4
-_temp12 1 8
-_temp13 0 4
+_temp12 0 4
+_temp13 3 7
 _temp14 0 4
 _temp15 0 4
-_temp16 1 8
+_temp16 0 4
 _temp17 0 4
-_temp18 1 8
+_temp18 0 4
 _temp19 0 4
 _temp20 0 4
-_temp21 0 4
-_temp22 1 8

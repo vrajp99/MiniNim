@@ -55,7 +55,7 @@ digit [0-9]
 IDENT {letter}("_"?({letter}|{digit}))*
 
 INTLIT {digit}+
-STRLIT \"[^"]*\"
+STRLIT \"[^"\n]*\"
 CHARLIT \'.\'
 FLOATLIT {digit}+"."{digit}+
 BOOLLIT true|false

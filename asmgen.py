@@ -1,7 +1,15 @@
+#!/usr/bin/env python3
 import sys
+
+class color:
+   GREEN = '\033[1;32;48m'
+   YELLOW = '\033[1;33;48m'
+   RED = '\033[1;31;48m'
+   END = '\033[0m'
 
 const = -1
 # int, float, bool, str, char = 0,1,2,3,4
+
 def gen_const():
     global const
     const+=1
@@ -34,7 +42,6 @@ def get_IR():
                 name, typ, size = line.strip().split()
                 vars[name] = var(name, int(typ), size)
             line = f.readline()
-    print(patches)
     for bplab in patches:
         IR = IR.replace(bplab+"\n", patches[bplab]+"\n")
     
@@ -79,10 +86,12 @@ def if_(a,b,label,op,sym):
     return code
 
 def printt(a,op):
-    if op=="f":
+    if op == "f":
         return "ldc1 $f12, %s\n\tli $v0, 3\n\tsyscall\n"%a
-    else:
+    elif op == "i":
         return "lw $a0, %s\n\tli $v0,1\n\tsyscall\n"%a
+    else:
+        return "la $a0, %s\n\tli $v0,4\n\tsyscall\n"%a
 
 def inputt(a,op):
     if op=="f":
@@ -96,8 +105,14 @@ def inputt(a,op):
         else:
             return "li $v0,5\n\tsyscall\n\tsw $v0, %s\n"%a
 
+printnl = lambda: "li $v0, 4\n\tla $a0, _newline\n\tsyscall\n"
 idiv = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-mod = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t0, $t1\n\tmfhi $t2\n\tsw $t2, %s\n"%(a.name,b.name,c.name)
+mod = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t0, $t1\n\tmfhi $t2\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
+ixor = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\txor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
+ior = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
+iand = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tand $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
+# strassign = lambda a,b: "la $a0, %s\n\tsa $a0, %s\n"%(b.name, a.name)
+# assignstr = lambda a,b: "la $a0, %s\n\tsa $a0, %s\n"%(b, a.name)
 assignfi = lambda a,b: "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b.name,a.name)
 assignii = lambda a,b: "lw $t0, %s\n\tsw $t0, %s\n"%(b.name, a.name)
 assignff = lambda a,b: loadf(a,b.name)
@@ -110,22 +125,27 @@ assignffarr = lambda a,ind,b: "lw $t0, %s\n\tldc1 $f2, %s($t0)\n\tsdc1 $f2, %s\n
 loadif = lambda a,b: "li $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b,a.name)
 loadf = lambda a,b: "ldc1 $f2, %s\n\tsdc1 $f2, %s\n"%(b,a.name)
 loadi = lambda a,b: "li $t0, %s\n\tsw $t0, %s\n"%(b,a.name)
-println= lambda: "li $v0, 4\n\tla $a0, _newline\n\tsyscall\n"
 
 #End Macros
 
 def gen_asm(IR, vars):
-    data = '.data\n\t_zero: .double 0.0\n\t_incr: .word 1\n\t_newline: .asciiz "\\n"\n\t.align 3\n'
+    data = '.data\n\t_zero: .double 0.0\n\t_incr: .word 1\n\t_newline: .asciiz "\\n"\n\t.align 6\n'
     text = ".text\n.globl main\n  main:"
     done = {"_incr"}
     for line in IR:
         atr = line.split()
-        if len(atr)==1:
+        if len(atr)>=3 and  ("\"" in atr[2]) and ("s=s" in atr[1]):
+            strr = line[line.find('"'):]
+            data += "\t" + atr[0] + ": .asciiz " + strr + "\n\t.align "+ str(8 - int(vars[atr[0]].size)%8)+"\n"
+            done.add(atr[0])
+        elif len(atr)==1 and atr[0][0]=="l":
             text += "\n  "+atr[0]+"\n"
+        elif len(atr)==1 and atr[0][0]=="p":
+            text += "\t"+printnl()
         elif len(atr)==2 and atr[0]=="goto":
             text += "\t"+"b "+atr[1]+"\n"
         elif len(atr)==2 and atr[0][1:]=="print":
-            text += "\t" + printt(atr[1],atr[0][0])+ "\t"+println()
+            text += "\t" + printt(atr[1],atr[0][0])+ "\t"
         elif len(atr)==2 and atr[0][1:]=="read":
             text += "\t" + inputt(atr[1],atr[0][0])+ "\t"
         elif len(atr)==3 and ("=" in atr[1]):
@@ -160,6 +180,8 @@ def gen_asm(IR, vars):
                     else:
                         text += "\t" + assigniiarr(vars[atr[0]], ind, vars[arr])
                 else:
+                    # if "s" in atr[1]:
+                    #     text += "\t" + strassign(vars[atr[0]], vars[atr[2]])
                     if atr[1][-1]=="f":
                         text += "\t" + assignfi(vars[atr[0]], vars[atr[2]])
                     elif atr[1][0]=="f":
@@ -181,6 +203,12 @@ def gen_asm(IR, vars):
                 text += "\t"+ idiv(vars[atr[0]], vars[atr[2]], vars[atr[4]])
             elif atr[3]=="mod":
                 text += "\t" + mod(vars[atr[0]], vars[atr[2]], vars[atr[4]])
+            elif atr[3]=="ixor":
+                text += "\t" + ixor(vars[atr[0]], vars[atr[2]], vars[atr[4]])
+            elif atr[3]=="ior":
+                text += "\t" + ior(vars[atr[0]], vars[atr[2]], vars[atr[4]])
+            elif atr[3]=="iand":
+                text += "\t" + iand(vars[atr[0]], vars[atr[2]], vars[atr[4]])
         elif len(atr)==6 and atr[0]=="if":
             op = atr[2].replace("f","")
             text += "\t" + if_(vars[atr[1]], vars[atr[3]], atr[5], atr[2], op)
@@ -204,6 +232,7 @@ def main():
     code = gen_asm(IR, vars)
     filename = sys.argv[1]
     dump_file(code, filename[:-4])
+    print(color.GREEN + "Build Complete: Generated", filename[:-4]+".asm" + color.END)
 
 if __name__=="__main__":
     main()
