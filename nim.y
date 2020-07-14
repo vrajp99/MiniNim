@@ -1149,8 +1149,40 @@ continueStmt: "continue" {
                             $$.code = scc(3,"goto ", bplabel, "\n");
                          }
 ;
-ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
-         |"if" expr colonBody INDEQ elifCondStmt "else" colonBody {}
+ifStmt: "if" expr colonBody elifCondStmt %prec IFX {
+                                                            char *label1 = new_label();
+                                                            char *label2 = new_label();
+                                                            char *bplabel = new_bplabel();
+                                                            backpatch($2.truelist, label1);
+                                                            backpatch($2.falselist, label2);
+                                                            globalfalselist = merge(globalfalselist, $2.falselist);
+                                                            globaltruelist = merge(globaltruelist, $2.truelist);
+
+                                                            $$.nextlist = merge(create_bp(bplabel) ,merge($3.nextlist, merge($4.nextlist,$4.falselist)));
+                                                            $$.breaklist = merge($3.breaklist,$4.breaklist);
+                                                            $$.continuelist = merge($3.continuelist,$4.continuelist);
+                                                            
+                                                            $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $4.code);
+                                                         }
+         |"if" expr colonBody elifCondStmt INDEQ "else" colonBody {
+                                                                    char *label1 = new_label();
+                                                                    char *label2 = new_label();
+                                                                    char *label3 = new_label();
+                                                                    char *bplabel = new_bplabel();
+
+                                                                    backpatch($2.truelist, label1);
+                                                                    backpatch($2.falselist, label2);
+                                                                    backpatch($4.falselist, label3);
+
+                                                                    globalfalselist = merge(globalfalselist, merge($2.falselist, $4.falselist));
+                                                                    globaltruelist = merge(globaltruelist, $2.truelist);
+
+                                                                    $$.nextlist = merge(create_bp(bplabel), merge($3.nextlist, merge($4.nextlist, $7.nextlist)));
+                                                                    $$.breaklist = merge($3.breaklist,merge($4.breaklist,$7.breaklist));
+                                                                    $$.continuelist = merge($3.continuelist,merge($4.continuelist,$7.continuelist));
+                                                                    
+                                                                    $$.code = scc(13, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $4.code, "goto ", bplabel,"\n", putl(label3), $7.code);
+                                                                  }
          | "if" expr colonBody %prec IFX {
                                             char *label = new_label();
                                             backpatch($2.truelist, label);
@@ -1175,11 +1207,34 @@ ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
                                                       }
 ;
 elifCondStmt: elifCondStmt INDEQ "elif" expr colonBody {
-                                                        // $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $6.code);
+                                                            char *label1 = new_label();
+                                                            char *label2 = new_label();
+                                                            char *bplabel = new_bplabel();
+
+                                                            backpatch($1.falselist, label1);
+                                                            backpatch($4.truelist, label2);
+                                                            globalfalselist = merge(globalfalselist, $1.falselist);
+                                                            globaltruelist = merge(globaltruelist, $4.truelist);
+
+                                                            $$.falselist = $4.falselist;
+                                                            $$.nextlist = merge(create_bp(bplabel), merge($1.nextlist, $5.nextlist));
+                                                            $$.breaklist = merge($1.breaklist,$5.breaklist);
+                                                            $$.continuelist = merge($1.continuelist,$5.continuelist);
+
+                                                            $$.code = scc(8, $1.code, "goto ", bplabel, "\n", putl(label1), $4.code, putl(label2), $5.code);
                                                        }
              | INDEQ "elif" expr colonBody {
-                                            // char *label = new_label();
-                                            // $$.code = scc(8, $3.code, putl(label), $4.code, "goto ", bplabel, "\n", putl(label2), $6.code);
+                                            char *label1 = new_label();
+
+                                            backpatch($3.truelist, label1);
+                                            globaltruelist = merge(globaltruelist, $3.truelist);
+
+                                            $$.falselist = $3.falselist;
+                                            $$.nextlist = $4.nextlist;
+                                            $$.breaklist = $4.breaklist;
+                                            $$.continuelist = $4.continuelist;
+
+                                            $$.code = scc(3, $3.code, putl(label1), $4.code);
                                            }
 ;
 whileStmt: "while" expr colonBody {

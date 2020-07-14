@@ -85,8 +85,8 @@ Grammar
 
    56 continueStmt: "continue"
 
-   57 ifStmt: "if" expr colonBody INDEQ elifCondStmt
-   58       | "if" expr colonBody INDEQ elifCondStmt "else" colonBody
+   57 ifStmt: "if" expr colonBody elifCondStmt
+   58       | "if" expr colonBody elifCondStmt INDEQ "else" colonBody
    59       | "if" expr colonBody
    60       | "if" expr colonBody INDEQ "else" colonBody
 
@@ -156,7 +156,7 @@ CHARLIT (261) 37
 BOOLLIT (262) 33
 IDENT (263) 30
 INDG (264) 69 86
-INDEQ (265) 2 4 57 58 60 61 62 70 87
+INDEQ (265) 2 4 58 60 61 62 70 87
 DED (266) 69 86
 "break" (267) 55
 "continue" (268) 56
@@ -328,8 +328,8 @@ State 4
 
 State 5
 
-   57 ifStmt: "if" . expr colonBody INDEQ elifCondStmt
-   58       | "if" . expr colonBody INDEQ elifCondStmt "else" colonBody
+   57 ifStmt: "if" . expr colonBody elifCondStmt
+   58       | "if" . expr colonBody elifCondStmt INDEQ "else" colonBody
    59       | "if" . expr colonBody
    60       | "if" . expr colonBody INDEQ "else" colonBody
 
@@ -762,8 +762,8 @@ State 37
 
 State 38
 
-   57 ifStmt: "if" expr . colonBody INDEQ elifCondStmt
-   58       | "if" expr . colonBody INDEQ elifCondStmt "else" colonBody
+   57 ifStmt: "if" expr . colonBody elifCondStmt
+   58       | "if" expr . colonBody elifCondStmt INDEQ "else" colonBody
    59       | "if" expr . colonBody
    60       | "if" expr . colonBody INDEQ "else" colonBody
 
@@ -1576,14 +1576,16 @@ State 80
 
 State 81
 
-   57 ifStmt: "if" expr colonBody . INDEQ elifCondStmt
-   58       | "if" expr colonBody . INDEQ elifCondStmt "else" colonBody
+   57 ifStmt: "if" expr colonBody . elifCondStmt
+   58       | "if" expr colonBody . elifCondStmt INDEQ "else" colonBody
    59       | "if" expr colonBody .
    60       | "if" expr colonBody . INDEQ "else" colonBody
 
     INDEQ  shift, and go to state 115
 
     $default  reduce using rule 59 (ifStmt)
+
+    elifCondStmt  go to state 116
 
 
 State 82
@@ -1592,7 +1594,7 @@ State 82
 
     $default  reduce using rule 71 (serVariable)
 
-    serVariable  go to state 116
+    serVariable  go to state 117
 
 
 State 83
@@ -1601,11 +1603,11 @@ State 83
    67         | symbol ':' . typeDesc
 
     IDENT    shift, and go to state 1
-    "array"  shift, and go to state 117
+    "array"  shift, and go to state 118
 
-    symbol     go to state 118
-    arrayDecl  go to state 119
-    typeDesc   go to state 120
+    symbol     go to state 119
+    arrayDecl  go to state 120
+    typeDesc   go to state 121
 
 
 State 84
@@ -1643,7 +1645,7 @@ State 86
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 121
+    expr            go to state 122
     primary         go to state 39
 
 
@@ -1694,7 +1696,7 @@ State 92
 
    46 arrayDeref: '[' expr . ']'
 
-    ']'  shift, and go to state 122
+    ']'  shift, and go to state 123
 
 
 State 93
@@ -1725,7 +1727,7 @@ State 94
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 123
+    expr            go to state 124
     primary         go to state 39
 
 
@@ -1750,7 +1752,7 @@ State 95
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 124
+    expr            go to state 125
     primary         go to state 39
 
 
@@ -1758,7 +1760,7 @@ State 96
 
    43 forStmt: "for" symbol "in" expr . ".." expr $@1 colonBody
 
-    ".."  shift, and go to state 125
+    ".."  shift, and go to state 126
 
 
 State 97
@@ -2276,7 +2278,7 @@ State 114
    65 colonBody: colon $@2 . stmt
 
     IDENT       shift, and go to state 1
-    INDG        shift, and go to state 126
+    INDG        shift, and go to state 127
     "break"     shift, and go to state 2
     "continue"  shift, and go to state 3
 
@@ -2284,91 +2286,99 @@ State 114
     exprStmt      go to state 15
     breakStmt     go to state 16
     continueStmt  go to state 17
-    simpleStmt    go to state 127
-    stmt          go to state 128
+    simpleStmt    go to state 128
+    stmt          go to state 129
 
 
 State 115
 
-   57 ifStmt: "if" expr colonBody INDEQ . elifCondStmt
-   58       | "if" expr colonBody INDEQ . elifCondStmt "else" colonBody
-   60       | "if" expr colonBody INDEQ . "else" colonBody
+   60 ifStmt: "if" expr colonBody INDEQ . "else" colonBody
+   62 elifCondStmt: INDEQ . "elif" expr colonBody
 
-    INDEQ   shift, and go to state 129
-    "else"  shift, and go to state 130
-
-    elifCondStmt  go to state 131
+    "elif"  shift, and go to state 130
+    "else"  shift, and go to state 131
 
 
 State 116
 
-   69 secVariable: INDG variable serVariable . DED
-   70 serVariable: serVariable . INDEQ variable
+   57 ifStmt: "if" expr colonBody elifCondStmt .
+   58       | "if" expr colonBody elifCondStmt . INDEQ "else" colonBody
+   61 elifCondStmt: elifCondStmt . INDEQ "elif" expr colonBody
 
     INDEQ  shift, and go to state 132
-    DED    shift, and go to state 133
+
+    $default  reduce using rule 57 (ifStmt)
 
 
 State 117
 
-   41 arrayDecl: "array" . '[' INTLIT comma typeDesc ']'
+   69 secVariable: INDG variable serVariable . DED
+   70 serVariable: serVariable . INDEQ variable
 
-    '['  shift, and go to state 134
+    INDEQ  shift, and go to state 133
+    DED    shift, and go to state 134
 
 
 State 118
+
+   41 arrayDecl: "array" . '[' INTLIT comma typeDesc ']'
+
+    '['  shift, and go to state 135
+
+
+State 119
 
    49 typeDesc: symbol .
 
     $default  reduce using rule 49 (typeDesc)
 
 
-State 119
+State 120
 
    50 typeDesc: arrayDecl .
 
     $default  reduce using rule 50 (typeDesc)
 
 
-State 120
+State 121
 
    66 variable: symbol ':' typeDesc . '=' expr
    67         | symbol ':' typeDesc .
 
-    '='  shift, and go to state 135
+    '='  shift, and go to state 136
 
     $default  reduce using rule 67 (variable)
 
 
-State 121
+State 122
 
    31 echoexprList: echoexprList comma expr .
 
     $default  reduce using rule 31 (echoexprList)
 
 
-State 122
+State 123
 
    46 arrayDeref: '[' expr ']' .
 
     $default  reduce using rule 46 (arrayDeref)
 
 
-State 123
+State 124
 
    45 arrayDeref: arrayDeref '[' expr . ']'
 
-    ']'  shift, and go to state 136
+    ']'  shift, and go to state 137
 
 
-State 124
+State 125
 
    52 exprStmt: symbol arrayDeref '=' expr .
 
     $default  reduce using rule 52 (exprStmt)
 
 
-State 125
+State 126
 
    43 forStmt: "for" symbol "in" expr ".." . expr $@1 colonBody
 
@@ -2389,87 +2399,102 @@ State 125
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 137
+    expr            go to state 138
     primary         go to state 39
 
 
-State 126
+State 127
 
    86 stmt: INDG . stmt2 complexOrSimpleStmt DED
 
     $default  reduce using rule 88 (stmt2)
 
-    stmt2  go to state 138
+    stmt2  go to state 139
 
 
-State 127
+State 128
 
    85 stmt: simpleStmt .
 
     $default  reduce using rule 85 (stmt)
 
 
-State 128
+State 129
 
    65 colonBody: colon $@2 stmt .
 
     $default  reduce using rule 65 (colonBody)
 
 
-State 129
-
-   62 elifCondStmt: INDEQ . "elif" expr colonBody
-
-    "elif"  shift, and go to state 139
-
-
 State 130
+
+   62 elifCondStmt: INDEQ "elif" . expr colonBody
+
+    INTLIT    shift, and go to state 23
+    FLOATLIT  shift, and go to state 24
+    STRLIT    shift, and go to state 25
+    CHARLIT   shift, and go to state 26
+    BOOLLIT   shift, and go to state 27
+    IDENT     shift, and go to state 1
+    "nil"     shift, and go to state 28
+    "not"     shift, and go to state 29
+    '-'       shift, and go to state 30
+    '+'       shift, and go to state 31
+    '$'       shift, and go to state 32
+    '('       shift, and go to state 33
+
+    sExpr           go to state 34
+    symbol          go to state 35
+    literal         go to state 36
+    identOrLiteral  go to state 37
+    expr            go to state 140
+    primary         go to state 39
+
+
+State 131
 
    60 ifStmt: "if" expr colonBody INDEQ "else" . colonBody
 
     ':'  shift, and go to state 79
 
     colon      go to state 80
-    colonBody  go to state 140
-
-
-State 131
-
-   57 ifStmt: "if" expr colonBody INDEQ elifCondStmt .
-   58       | "if" expr colonBody INDEQ elifCondStmt . "else" colonBody
-   61 elifCondStmt: elifCondStmt . INDEQ "elif" expr colonBody
-
-    INDEQ   shift, and go to state 141
-    "else"  shift, and go to state 142
-
-    $default  reduce using rule 57 (ifStmt)
+    colonBody  go to state 141
 
 
 State 132
+
+   58 ifStmt: "if" expr colonBody elifCondStmt INDEQ . "else" colonBody
+   61 elifCondStmt: elifCondStmt INDEQ . "elif" expr colonBody
+
+    "elif"  shift, and go to state 142
+    "else"  shift, and go to state 143
+
+
+State 133
 
    70 serVariable: serVariable INDEQ . variable
 
     IDENT  shift, and go to state 1
 
     symbol    go to state 41
-    variable  go to state 143
+    variable  go to state 144
 
 
-State 133
+State 134
 
    69 secVariable: INDG variable serVariable DED .
 
     $default  reduce using rule 69 (secVariable)
 
 
-State 134
+State 135
 
    41 arrayDecl: "array" '[' . INTLIT comma typeDesc ']'
 
-    INTLIT  shift, and go to state 144
+    INTLIT  shift, and go to state 145
 
 
-State 135
+State 136
 
    66 variable: symbol ':' typeDesc '=' . expr
 
@@ -2490,27 +2515,27 @@ State 135
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 145
+    expr            go to state 146
     primary         go to state 39
 
 
-State 136
+State 137
 
    45 arrayDeref: arrayDeref '[' expr ']' .
 
     $default  reduce using rule 45 (arrayDeref)
 
 
-State 137
+State 138
 
    43 forStmt: "for" symbol "in" expr ".." expr . $@1 colonBody
 
     $default  reduce using rule 42 ($@1)
 
-    $@1  go to state 146
+    $@1  go to state 147
 
 
-State 138
+State 139
 
    86 stmt: INDG stmt2 . complexOrSimpleStmt DED
    87 stmt2: stmt2 . complexOrSimpleStmt INDEQ
@@ -2534,111 +2559,27 @@ State 138
     ifStmt               go to state 18
     whileStmt            go to state 19
     simpleStmt           go to state 20
-    complexOrSimpleStmt  go to state 147
-
-
-State 139
-
-   62 elifCondStmt: INDEQ "elif" . expr colonBody
-
-    INTLIT    shift, and go to state 23
-    FLOATLIT  shift, and go to state 24
-    STRLIT    shift, and go to state 25
-    CHARLIT   shift, and go to state 26
-    BOOLLIT   shift, and go to state 27
-    IDENT     shift, and go to state 1
-    "nil"     shift, and go to state 28
-    "not"     shift, and go to state 29
-    '-'       shift, and go to state 30
-    '+'       shift, and go to state 31
-    '$'       shift, and go to state 32
-    '('       shift, and go to state 33
-
-    sExpr           go to state 34
-    symbol          go to state 35
-    literal         go to state 36
-    identOrLiteral  go to state 37
-    expr            go to state 148
-    primary         go to state 39
+    complexOrSimpleStmt  go to state 148
 
 
 State 140
-
-   60 ifStmt: "if" expr colonBody INDEQ "else" colonBody .
-
-    $default  reduce using rule 60 (ifStmt)
-
-
-State 141
-
-   61 elifCondStmt: elifCondStmt INDEQ . "elif" expr colonBody
-
-    "elif"  shift, and go to state 149
-
-
-State 142
-
-   58 ifStmt: "if" expr colonBody INDEQ elifCondStmt "else" . colonBody
-
-    ':'  shift, and go to state 79
-
-    colon      go to state 80
-    colonBody  go to state 150
-
-
-State 143
-
-   70 serVariable: serVariable INDEQ variable .
-
-    $default  reduce using rule 70 (serVariable)
-
-
-State 144
-
-   41 arrayDecl: "array" '[' INTLIT . comma typeDesc ']'
-
-    ','  shift, and go to state 85
-
-    comma  go to state 151
-
-
-State 145
-
-   66 variable: symbol ':' typeDesc '=' expr .
-
-    $default  reduce using rule 66 (variable)
-
-
-State 146
-
-   43 forStmt: "for" symbol "in" expr ".." expr $@1 . colonBody
-
-    ':'  shift, and go to state 79
-
-    colon      go to state 80
-    colonBody  go to state 152
-
-
-State 147
-
-   86 stmt: INDG stmt2 complexOrSimpleStmt . DED
-   87 stmt2: stmt2 complexOrSimpleStmt . INDEQ
-
-    INDEQ  shift, and go to state 153
-    DED    shift, and go to state 154
-
-
-State 148
 
    62 elifCondStmt: INDEQ "elif" expr . colonBody
 
     ':'  shift, and go to state 79
 
     colon      go to state 80
-    colonBody  go to state 155
+    colonBody  go to state 149
 
 
-State 149
+State 141
+
+   60 ifStmt: "if" expr colonBody INDEQ "else" colonBody .
+
+    $default  reduce using rule 60 (ifStmt)
+
+
+State 142
 
    61 elifCondStmt: elifCondStmt INDEQ "elif" . expr colonBody
 
@@ -2659,82 +2600,134 @@ State 149
     symbol          go to state 35
     literal         go to state 36
     identOrLiteral  go to state 37
-    expr            go to state 156
+    expr            go to state 150
     primary         go to state 39
 
 
-State 150
+State 143
 
-   58 ifStmt: "if" expr colonBody INDEQ elifCondStmt "else" colonBody .
+   58 ifStmt: "if" expr colonBody elifCondStmt INDEQ "else" . colonBody
 
-    $default  reduce using rule 58 (ifStmt)
+    ':'  shift, and go to state 79
 
-
-State 151
-
-   41 arrayDecl: "array" '[' INTLIT comma . typeDesc ']'
-
-    IDENT    shift, and go to state 1
-    "array"  shift, and go to state 117
-
-    symbol     go to state 118
-    arrayDecl  go to state 119
-    typeDesc   go to state 157
+    colon      go to state 80
+    colonBody  go to state 151
 
 
-State 152
+State 144
 
-   43 forStmt: "for" symbol "in" expr ".." expr $@1 colonBody .
+   70 serVariable: serVariable INDEQ variable .
 
-    $default  reduce using rule 43 (forStmt)
-
-
-State 153
-
-   87 stmt2: stmt2 complexOrSimpleStmt INDEQ .
-
-    $default  reduce using rule 87 (stmt2)
+    $default  reduce using rule 70 (serVariable)
 
 
-State 154
+State 145
 
-   86 stmt: INDG stmt2 complexOrSimpleStmt DED .
+   41 arrayDecl: "array" '[' INTLIT . comma typeDesc ']'
 
-    $default  reduce using rule 86 (stmt)
+    ','  shift, and go to state 85
+
+    comma  go to state 152
 
 
-State 155
+State 146
+
+   66 variable: symbol ':' typeDesc '=' expr .
+
+    $default  reduce using rule 66 (variable)
+
+
+State 147
+
+   43 forStmt: "for" symbol "in" expr ".." expr $@1 . colonBody
+
+    ':'  shift, and go to state 79
+
+    colon      go to state 80
+    colonBody  go to state 153
+
+
+State 148
+
+   86 stmt: INDG stmt2 complexOrSimpleStmt . DED
+   87 stmt2: stmt2 complexOrSimpleStmt . INDEQ
+
+    INDEQ  shift, and go to state 154
+    DED    shift, and go to state 155
+
+
+State 149
 
    62 elifCondStmt: INDEQ "elif" expr colonBody .
 
     $default  reduce using rule 62 (elifCondStmt)
 
 
-State 156
+State 150
 
    61 elifCondStmt: elifCondStmt INDEQ "elif" expr . colonBody
 
     ':'  shift, and go to state 79
 
     colon      go to state 80
-    colonBody  go to state 158
+    colonBody  go to state 156
 
 
-State 157
+State 151
 
-   41 arrayDecl: "array" '[' INTLIT comma typeDesc . ']'
+   58 ifStmt: "if" expr colonBody elifCondStmt INDEQ "else" colonBody .
 
-    ']'  shift, and go to state 159
+    $default  reduce using rule 58 (ifStmt)
 
 
-State 158
+State 152
+
+   41 arrayDecl: "array" '[' INTLIT comma . typeDesc ']'
+
+    IDENT    shift, and go to state 1
+    "array"  shift, and go to state 118
+
+    symbol     go to state 119
+    arrayDecl  go to state 120
+    typeDesc   go to state 157
+
+
+State 153
+
+   43 forStmt: "for" symbol "in" expr ".." expr $@1 colonBody .
+
+    $default  reduce using rule 43 (forStmt)
+
+
+State 154
+
+   87 stmt2: stmt2 complexOrSimpleStmt INDEQ .
+
+    $default  reduce using rule 87 (stmt2)
+
+
+State 155
+
+   86 stmt: INDG stmt2 complexOrSimpleStmt DED .
+
+    $default  reduce using rule 86 (stmt)
+
+
+State 156
 
    61 elifCondStmt: elifCondStmt INDEQ "elif" expr colonBody .
 
     $default  reduce using rule 61 (elifCondStmt)
 
 
-State 159
+State 157
+
+   41 arrayDecl: "array" '[' INTLIT comma typeDesc . ']'
+
+    ']'  shift, and go to state 158
+
+
+State 158
 
    41 arrayDecl: "array" '[' INTLIT comma typeDesc ']' .
 

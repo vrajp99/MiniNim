@@ -41,7 +41,7 @@ void set_yycolumn(int val) {
 %x indent
 %s normal
 
- /* %option 8bit reentrant bison-bridge */
+/* %option 8bit reentrant bison-bridge */
 %option warn
 %option nodefault
 %option yylineno
@@ -65,28 +65,19 @@ BOOLLIT true|false
 
 
 <*>\n { set_yycolumn(0); yylineno--; 
-      // PRINTF("REJECT\n"); 
       REJECT; }
 <initial>.  { set_yycolumn(yycolumn-1); indent_caller = normal; yyless(0); 
-            //  PRINTF("initial .\n");
              BEGIN(indent); }
 <initial>\n { indent_caller = normal; yyless(0); BEGIN(indent);
-            //   PRINTF("initial \\n"); 
             }
 <indent>" "     { g_current_line_indent++; 
-                // PRINTF("Indent space\n");
                 }
 <indent>\n      { g_current_line_indent = 0; 
-                // PRINTF("Indent \\n\n");
                 /* ignoring blank line */ }
 <indent><<EOF>> {   
-                    // PRINTF("\nEOF");
-                    // When encountering the end of file, we want to emit an
-                    // outdent for all indents currently left.
                     if(indent_stack->value != 0) {
                         pop(&indent_stack);
 
-                        // See the same code below (<indent>.) for a rationale.
                         if(g_current_line_indent != indent_stack->value) {
                             unput('\n');
                             for(size_t i = 0 ; i < indent_stack->value ; ++i) {
@@ -103,7 +94,6 @@ BOOLLIT true|false
                 }
 
 <indent>.       {   
-                    // PRINTF("Indenter Entry\n");
                     if(!g_is_fake_outdent_symbol) {
                         unput(*yytext);
                     }
@@ -126,20 +116,13 @@ BOOLLIT true|false
                     } else if(g_current_line_indent < indent_stack->value) {
                         pop(&indent_stack);
                         if(g_current_line_indent != indent_stack->value) {
-                            // PRINTF("This IF\n");
                             for(size_t i = 0 ; i < g_current_line_indent ; ++i) {
                                 unput(' ');
                             }
                             unput('\n');
                             unput('.');
                             g_is_fake_outdent_symbol = 1;
-                            // for(size_t i = 0 ; i < indent_stack->value ; ++i) {
-                            //     unput(' ');
-                            // }
-                            // unput('\n');
                         } else {
-                            // PRINTF("That IF\n");
-                            // BEGIN(indent_caller);
                         }
                         PRINTF("DED\n");
                         return DED;
@@ -149,11 +132,9 @@ BOOLLIT true|false
                 }
 
 <normal>\n    {
-                // PRINTF("NORMAL \n"); 
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
 <normal><<EOF>> {
-                // PRINTF("NORMAL \n"); 
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
 <normal>{OP}        {   
@@ -218,33 +199,3 @@ BOOLLIT true|false
 <normal>.              {PRINTF("%s\n", yytext);return yytext[0];}
 
 %%
-// {number} {sscanf(yytext,"%lf",&yylval.val);return NUM;}
-// {id} {symrec *s;s=getsym(yytext); if(s==0) s=putsym(yytext,VAR);yylval.tptr=s;return s->type;}
-// \n|.  {return yytext[0];}
-
-// "+"|"-"|"*"|"/"   printf( "An operator: %s\n", yytext );
-
-// "{"[^}\n]*"}"     /* eat up one-line comments */
-
-/* The symbol table: a chain of `struct symrec'.  */
-
-// symrec * putsym (char *sym_name,int sym_type){
-//   symrec *ptr;
-//   ptr = (symrec *) malloc (sizeof (symrec));
-//   ptr->name = (char *) malloc (strlen (sym_name) + 1);
-//   strcpy (ptr->name,sym_name);
-//   ptr->type = sym_type;
-//   ptr->value.var = 0; /* set value to 0 even if fctn.  */
-//   ptr->next = (struct symrec *)sym_table;
-//   sym_table = ptr;
-//   return ptr;
-// }
-
-// symrec *getsym (char *sym_name){
-//   symrec *ptr;
-//   for (ptr = sym_table; ptr != (symrec *) 0;
-//        ptr = (symrec *)ptr->next)
-//     if (strcmp (ptr->name,sym_name) == 0)
-//       return ptr;
-//   return 0;
-// }

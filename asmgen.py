@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 import sys
 
+# For changing color of output in print
 class color:
-   GREEN = '\033[1;32;48m'
-   YELLOW = '\033[1;33;48m'
-   RED = '\033[1;31;48m'
-   END = '\033[0m'
+    GREEN = '\033[1;32;48m'
+    YELLOW = '\033[1;33;48m'
+    RED = '\033[1;31;48m'
+    END = '\033[0m'
 
-const = -1
-# int, float, bool, str, char = 0,1,2,3,4
+class var:
+    def __init__(self, name, typ, size):
+        self.name = name # Name of the variable (This will be the alias)
+        self.type = typ # int, float, bool, str, char = 0,1,2,3,4
+        self.size = size # 
+
+const = -1 # A global counter 
 
 def gen_const():
     global const
     const+=1
     return "_const%d"%const
-
-class var:
-    def __init__(self, name, typ, size):
-        self.name = name
-        self.type = typ
-        self.size = size
 
 def get_IR():
     IR = ""
