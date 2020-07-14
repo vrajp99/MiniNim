@@ -1,7 +1,7 @@
 label0:
 _temp1 f=f 3.141593
 _temp2 f= _temp1
-label6:
+label7:
 _temp3 = 0
 _temp4 = 1
 _temp5 = _temp3
@@ -32,16 +32,16 @@ label3:
 goto _bp0
 label4:
 goto _bp1
+label6:
 _temp5 = _temp5 + _incr
 goto label5
-label7:
+label8:
 IR_END
 
 PATCH_LABELS
 
-_bp0 label4
-_bp1 label7
-_bp2 label7
+_bp1 label8
+_bp2 label8
 
 DATA
 

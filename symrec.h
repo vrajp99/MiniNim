@@ -59,6 +59,7 @@ typedef struct sdd{
   bp_node *falselist;
   bp_node *nextlist;
   bp_node *breaklist;
+  bp_node *continuelist;
 } sdd;
 
 typedef struct arr_deref{

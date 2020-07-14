@@ -1,3 +1,5 @@
+import sys
+
 const = -1
 # int, float, bool, str, char = 0,1,2,3,4
 def gen_const():
@@ -182,11 +184,14 @@ def gen_asm(IR, vars):
         elif len(atr)==6 and atr[0]=="if":
             op = atr[2].replace("f","")
             text += "\t" + if_(vars[atr[1]], vars[atr[3]], atr[5], atr[2], op)
+    
     for ident in vars:
         if ident not in done:
             data += "\t" + ident +": .space "+ vars[ident].size +"\n"
             if int(vars[ident].size)%8:
                 data += "\t.align " + str(8 - int(vars[ident].size)%8) + "\n"
+    
+    text += "\tli $v0, 10\n\tsyscall\n"
     return data + "\n" + text
 
 def dump_file(code, name):
@@ -197,7 +202,8 @@ def main():
     IR, vars = get_IR()
     vars["_incr"] = var("_incr", 0,"4")
     code = gen_asm(IR, vars)
-    dump_file(code, "mininim")
+    filename = sys.argv[1]
+    dump_file(code, filename[:-4])
 
 if __name__=="__main__":
     main()

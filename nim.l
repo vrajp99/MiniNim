@@ -95,6 +95,7 @@ BOOLLIT true|false
                         } else {
                             BEGIN(indent_caller);
                         }
+                        PRINTF("DED\n");
                         return DED;
                     } else {
                         yyterminate();

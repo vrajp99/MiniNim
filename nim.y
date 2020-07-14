@@ -56,7 +56,7 @@ bp_node *merge(bp_node *l1, bp_node *l2){
 }
 
 void backpatch(bp_node *l, char *bp_label){
-    if (l==NULL) return;
+    if (l==NULL) return;    
     l->bp_label = bp_label;
     backpatch(l->prev, bp_label);
 }
@@ -757,13 +757,17 @@ arrayDecl: "array" '['  INTLIT comma typeDesc ']' {     if ($5.aux_type == BASIC
 
 forStmt: "for"  symbol  "in" expr ".." expr {open_scope();putsym($2.value.name,INT_TYPE);} colonBody {
                                                                           char* label = new_label();
+                                                                          char* label2 = new_label();
                                                                           char* bplabel = new_bplabel();
                                                                           symrec* sym = getsym($2.value.name);
                                                                           char* sa = sym->alias;
-                                                                          backpatch($8.nextlist, label);
+                                                                          backpatch($8.nextlist, label2);
+                                                                          backpatch($8.continuelist, label2);
                                                                           globalnextlist = merge(globalnextlist, $8.nextlist);
+                                                                          globalnextlist = merge(globalnextlist, $8.continuelist);
                                                                           $$.nextlist = merge($8.breaklist, create_bp(bplabel));
                                                                           $$.breaklist = NULL;
+                                                                          $$.continuelist = NULL;
                                                                           /*
                                                                                 expr1.code
                                                                                 expr2.code
@@ -774,7 +778,7 @@ forStmt: "for"  symbol  "in" expr ".." expr {open_scope();putsym($2.value.name,I
                                                                                 sym->alias = sym->alias + _incr
                                                                                 goto label1
                                                                           */
-                                                                          $$.code = scc(22, $4.code, $6.code, sa, " = ", $4.addr,"\n", putl(label), "if ", $6.addr, " lt ", sa, " goto ",bplabel, "\n", $8.code, sa, " = ",sa," + ","_incr\ngoto ",label,"\n");
+                                                                          $$.code = scc(23, $4.code, $6.code, sa, " = ", $4.addr,"\n", putl(label), "if ", $6.addr, " lt ", sa, " goto ",bplabel, "\n", $8.code, putl(label2), sa, " = ",sa," + ","_incr\ngoto ",label,"\n");
                                                                           close_scope();
                                                                       }
 ;
@@ -1072,13 +1076,15 @@ breakStmt: "break" {
                         char *bplabel = new_bplabel();
                         $$.breaklist = create_bp(bplabel);
                         $$.nextlist = NULL;
+                        $$.continuelist = NULL;
                         $$.code = scc(3,"goto ", bplabel, "\n");
                    }
 ;
 continueStmt: "continue" {
                             char *bplabel = new_bplabel();
                             $$.breaklist = NULL;
-                            $$.nextlist = create_bp(bplabel);
+                            $$.nextlist = NULL;
+                            $$.continuelist = create_bp(bplabel);
                             $$.code = scc(3,"goto ", bplabel, "\n");
                          }
 ;
@@ -1090,6 +1096,7 @@ ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
                                             globaltruelist = merge(globaltruelist, $2.truelist);
                                             $$.nextlist = merge($2.falselist, $3.nextlist);
                                             $$.breaklist = $3.breaklist;
+                                            $$.continuelist = $3.continuelist;
                                             $$.code = scc(3, $2.code, putl(label), $3.code);
                                           }
          | "if" expr colonBody INDEQ "else" colonBody {
@@ -1102,6 +1109,7 @@ ifStmt: "if" expr colonBody INDEQ elifCondStmt %prec IFX {}
                                                         globaltruelist = merge(globaltruelist, $2.truelist);
                                                         $$.nextlist = merge(create_bp(bplabel) ,merge($3.nextlist, $6.nextlist));
                                                         $$.breaklist = merge($3.breaklist,$6.breaklist);
+                                                        $$.continuelist = merge($3.continuelist,$6.continuelist);
                                                         $$.code = scc(8, $2.code, putl(label1), $3.code, "goto ", bplabel, "\n", putl(label2), $6.code);
                                                       }
 ;
@@ -1117,11 +1125,14 @@ whileStmt: "while" expr colonBody {
                                       char* label1 = new_label();
                                       char* label2 = new_label();
                                       backpatch($3.nextlist, label1);
+                                      backpatch($3.continuelist, label1);
                                       backpatch($2.truelist, label2);
                                       globalnextlist = merge(globalnextlist,$3.nextlist);
+                                      globalnextlist = merge(globalnextlist, $3.continuelist);
                                       globaltruelist = merge(globaltruelist, $2.truelist);
                                       $$.nextlist = merge($2.falselist,$3.breaklist);
                                       $$.breaklist = NULL;
+                                      $$.continuelist = NULL;
                                       $$.code = scc(7,putl(label1),$2.code,putl(label2),$3.code,"goto ",label1,"\n");
                                   }
 ;
@@ -1136,7 +1147,7 @@ whileStmt: "while" expr colonBody {
 // varTuple: "("  symbolCommaNoHang ")" "="  expr
 //         | "("  symbol ")" "="  expr
 // ;
-colonBody: colon {open_scope();} stmt {close_scope();$$.code = $3.code; $$.nextlist = $3.nextlist; $$.breaklist = $3.breaklist;}
+colonBody: colon {open_scope();} stmt {close_scope();$$.code = $3.code; $$.nextlist = $3.nextlist; $$.breaklist = $3.breaklist;$$.continuelist = $3.continuelist;}
 ;
 // variable: varTuple 
 //          | declColon "=" expr 
@@ -1145,6 +1156,7 @@ colonBody: colon {open_scope();} stmt {close_scope();$$.code = $3.code; $$.nextl
 variable: symbol ':'  typeDesc '=' expr {
                                             if ($3.aux_type == BASIC_TYPE) {
                                             $$.nextlist = NULL; $$.breaklist = NULL;
+                                            $$.continuelist = NULL;
                                             putsym($1.value.name,$3.type);
                                             symrec * symb = getsym($1.value.name);
                                             char * opr;
@@ -1173,6 +1185,7 @@ variable: symbol ':'  typeDesc '=' expr {
                                     if($3.aux_type == BASIC_TYPE){
                                         putsym($1.value.name,$3.type);
                                         $$.nextlist = NULL; $$.breaklist = NULL; 
+                                        $$.continuelist = NULL;
                                         $$.code = "";
                                     }
                                     else{
@@ -1182,31 +1195,34 @@ variable: symbol ':'  typeDesc '=' expr {
                                         symb->arr_depth = $3.arr_depth;
                                         for (int i=0; i<$3.arr_depth; i++) symb->arr_data[i] = $3.arr_data[i];
                                         $$.nextlist = NULL; $$.breaklist = NULL; 
+                                        $$.continuelist = NULL;
                                         $$.code = "";
                                     }
                                 }
 ;
-secVariable: variable {$$.code = $1.code; $$.nextlist=NULL; $$.breaklist = NULL;}
-            | INDG variable serVariable DED { $$.code = scc(2,$2.code,$3.code);$$.nextlist = NULL; $$.breaklist = NULL;}
+secVariable: variable {$$.code = $1.code; $$.nextlist=NULL; $$.breaklist = NULL; $$.continuelist = NULL;}
+            | INDG variable serVariable DED { $$.code = scc(2,$2.code,$3.code);$$.nextlist = NULL; $$.breaklist = NULL; $$.continuelist = NULL;}
 ;
-serVariable: serVariable INDEQ variable  {$$.code = scc(2,$1.code, $3.code);$$.nextlist = NULL; $$.breaklist = NULL;}
-            | {$$.code = "", $$.nextlist = NULL; $$.breaklist = NULL;}
+serVariable: serVariable INDEQ variable  {$$.code = scc(2,$1.code, $3.code);$$.nextlist = NULL; $$.breaklist = NULL;$$.continuelist = NULL;}
+            | {$$.code = "", $$.nextlist = NULL; $$.breaklist = NULL;$$.continuelist = NULL;}
 ;
 /* simpleStmt: returnStmt */
 simpleStmt: breakStmt {
                             $$.nextlist = $1.nextlist;
                             $$.breaklist = $1.breaklist;
+                            $$.continuelist = $1.continuelist;
                             $$.code = $1.code;
                         }
             | continueStmt {
                                $$.nextlist = $1.nextlist;
                                $$.breaklist = $1.breaklist;
+                               $$.continuelist = $1.continuelist;
                                $$.code = $1.code;
                            } 
-            | exprStmt {$$.code = $1.code; $$.nextlist = NULL; $$.breaklist = NULL;}
+            | exprStmt {$$.code = $1.code; $$.nextlist = NULL; $$.breaklist = NULL;$$.continuelist = NULL;}
 ;
-complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
-                    | whileStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
+complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;$$.continuelist = $1.continuelist;}
+                    | whileStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;$$.continuelist = $1.continuelist;}
                     | forStmt 
                     | "echo" expr { 
                                         char * opr;
@@ -1223,11 +1239,12 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                             exit(EXIT_FAILURE);
                                         }
                                         $$.nextlist = NULL; $$.breaklist = NULL;
+                                        $$.continuelist = NULL;
                                         $$.code = scc(4,$2.code, opr ,$2.addr,"\n");
                                     }
                     /* | "proc" routine
                     | "type" typeDef */
-                    | "var" secVariable {$$.code = $2.code; $$.nextlist = $2.nextlist; $$.breaklist = $2.breaklist;}
+                    | "var" secVariable {$$.code = $2.code; $$.nextlist = $2.nextlist; $$.breaklist = $2.breaklist;$$.continuelist = $2.continuelist;}
                     | "readInt" symbol {
                                             symrec * symb = getsym($2.value.name);
                                             if (symb->type != INT_TYPE){
@@ -1237,6 +1254,7 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                                 exit(EXIT_FAILURE);
                                             }
                                             $$.nextlist = NULL; $$.breaklist = NULL;
+                                            $$.continuelist = NULL;
                                             $$.code  = scc(3,"iread ",symb->alias,"\n");
                                        }
                     | "readInt" symbol arrayDeref {
@@ -1288,6 +1306,7 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                                               exit(EXIT_FAILURE);
                                                           }
                                                           $$.nextlist = NULL; $$.breaklist = NULL;
+                                                          $$.continuelist = NULL;
                                                           $$.code  = scc(6,$$.code,"iread ",symb->alias,"[", ind, "]\n");
                                                       }
                                                       
@@ -1301,6 +1320,7 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                                 exit(EXIT_FAILURE);
                                             }
                                             $$.nextlist = NULL; $$.breaklist = NULL;
+                                            $$.continuelist = NULL;
                                             $$.code  = scc(3,"fread ",symb->alias,"\n");
                                         }
                     | "readFloat" symbol arrayDeref {
@@ -1352,18 +1372,20 @@ complexOrSimpleStmt: ifStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.br
                                                                 exit(EXIT_FAILURE);
                                                             }
                                                             $$.nextlist = NULL; $$.breaklist = NULL;
+                                                            $$.continuelist = NULL;
                                                             $$.code  = scc(6,$$.code,"fread ",symb->alias,"[", ind, "]\n");
                                                         }
                                                     }
-                    | simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;$$.breaklist = $1.breaklist;}
+                    | simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist;$$.breaklist = $1.breaklist;$$.continuelist = $1.continuelist;}
 ;
-stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;}
+stmt: simpleStmt {$$.code = $1.code; $$.nextlist = $1.nextlist; $$.breaklist = $1.breaklist;$$.continuelist = $1.continuelist;}
       | INDG stmt2 complexOrSimpleStmt DED {
                                             char *label = new_label(); 
                                             backpatch($2.nextlist, label);
                                             globalnextlist = merge(globalnextlist, $2.nextlist);
                                             $$.nextlist = $3.nextlist;
                                             $$.breaklist = merge($2.breaklist, $3.breaklist);
+                                            $$.continuelist = merge($2.continuelist, $3.continuelist);
                                             $$.code = scc(3, $2.code, putl(label), $3.code);
                                            }
 ;
@@ -1373,9 +1395,10 @@ stmt2: stmt2 complexOrSimpleStmt INDEQ {
                                         globalnextlist = merge(globalnextlist, $1.nextlist);
                                         $$.nextlist = $2.nextlist;
                                         $$.breaklist = merge($1.breaklist, $2.breaklist);
+                                        $$.continuelist = merge($1.continuelist, $2.continuelist);
                                         $$.code = scc(3, $1.code, putl(label), $2.code);
                                        }
-      | {$$.code = ""; $$.nextlist = NULL; $$.breaklist = NULL;}
+      | {$$.code = ""; $$.nextlist = NULL; $$.breaklist = NULL;$$.continuelist = NULL;}
 ;
 
 %%
