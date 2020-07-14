@@ -7,7 +7,6 @@ Reference: http://dinosaur.compilertools.net/bison/bison_5.html
 #include<string.h>
 #include<stdlib.h> 
 #include <stdarg.h>
-#include <math.h>
 #include "backpatch.h"
 #include "symrec.h"  /* Contains definition of `symrec" */
 #define PARSER_DEBUG

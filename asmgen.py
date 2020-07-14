@@ -116,7 +116,7 @@ println= lambda: "li $v0, 4\n\tla $a0, _newline\n\tsyscall\n"
 
 def gen_asm(IR, vars):
     data = '.data\n\t_zero: .double 0.0\n\t_incr: .word 1\n\t_newline: .asciiz "\\n"\n\t.align 3\n'
-    text = ".text\n"
+    text = ".text\n.globl main\n  main:"
     done = {"_incr"}
     for line in IR:
         atr = line.split()
