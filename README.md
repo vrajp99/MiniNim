@@ -39,7 +39,7 @@ There are several sample programs provided in the `examples/` directory which il
 - `fibonacci.nim`: Prints the first `n` terms of Fibonacci sequence for given `n`.
 - `fizzbuzz.nim`: Implements Fizz Buzz.
 - `knapsack.nim`: Solves the Knapsack Problem for given input using Dynamic Programming.
-- `nimgame.nim`: Given the winner of Nim Game played between Alice and Bob for given configuration.
+- `nimgame.nim`: Gives the winner of Nim Game played between Alice and Bob for given configuration.
 - `sieve.nim`: Printing all primes upto a given number using the Sieve of Eratosthenes.
 - `sqrt.nim`: Finding square root of a number using binary search.
 
