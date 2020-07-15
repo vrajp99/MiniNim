@@ -1,7 +1,7 @@
 /* 
     MiniNim: Parser (with Intermediate Code Generation)
     Reference: http://dinosaur.compilertools.net/bison/bison_5.html
-    
+
 */
 
 %{
@@ -878,10 +878,6 @@ primary: identOrLiteral             {
                                                     puttemp(temp1,INT_TYPE);
                                                     puttemp(temp2,INT_TYPE);
                                                     $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $2.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
-                                                    /*
-                                                        type_widths: (symb->arr_data reverse prefix product) * typewidth
-                                                        temp += type_widths[i]*$2.arr_data[i] 
-                                                    */
                                                 }
                                                 char * opr;
                                                 if(symb->type == INT_TYPE){
@@ -978,11 +974,6 @@ exprStmt: symbol '=' expr           {
                                                     puttemp(temp1,INT_TYPE);
                                                     puttemp(temp2,INT_TYPE);
                                                     $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $2.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
-                                                    /*
-                                                        type_widths: (symb->arr_data reverse prefix product) * typewidth
-
-                                                        temp += type_widths[i]*$2.arr_data[i] 
-                                                    */
                                                 }
                                                 char* opr;
                                                 if ($4.type == INT_TYPE && symb->type == FLOAT_TYPE){
@@ -1286,10 +1277,6 @@ complexOrSimpleStmt: ifStmt                     {
                                                             puttemp(temp1,INT_TYPE);
                                                             puttemp(temp2,INT_TYPE);
                                                             $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $3.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
-                                                            /*
-                                                                type_widths: (symb->arr_data reverse prefix product) * typewidth
-                                                                temp += type_widths[i]*$2.arr_data[i] 
-                                                            */
                                                         }
                                                         if (symb->type != INT_TYPE){
                                                             printf(TO_RED);
@@ -1363,11 +1350,6 @@ complexOrSimpleStmt: ifStmt                     {
                                                             puttemp(temp1,INT_TYPE);
                                                             puttemp(temp2,INT_TYPE);
                                                             $$.code = scc(17, $$.code, temp1, " = ", type_widths_str[i], "\n", temp2, " = ", temp1, " * ", $3.arr_data[i],"\n", ind, " = ", ind, " + ", temp2,"\n");
-                                                            /*
-                                                                type_widths: (symb->arr_data reverse prefix product) * typewidth
-                                                                for []
-                                                                temp += type_widths[i]*$2.arr_data[i] 
-                                                            */
                                                         }
                                                         if (symb->type != FLOAT_TYPE){
                                                             printf(TO_RED);

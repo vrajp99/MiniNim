@@ -225,7 +225,9 @@ Here are some features that could be added later to increase the scope of this p
 - Add more datatypes like enum, tuple and object
 - Add support for imports
 - Implement blocks (`block`)
-- Add ref, ptr and garbage collection
+- Add `ref`, `ptr` and garbage collection
+- Register Allocation
+- Machine Independent and Dependent Optimizations
 
 Another interesting direction would be to try to rewrite this completely in a higher level language like C++ or Python using some other library to make life simpler through the use of Object Oriented Programming and better string manipulation. 
 
