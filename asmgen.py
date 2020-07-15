@@ -12,15 +12,21 @@ class var:
     def __init__(self, name, typ, size):
         self.name = name # Name of the variable (This will be the alias)
         self.type = typ # int, float, bool, str, char = 0,1,2,3,4
-        self.size = size # 
+        self.size = size # Number of bytes of storage required
 
-const = -1 # A global counter 
+const = -1 # A global counter, used for float literals, as they have to be stored in .data 
 
+# Utility function to generate a constant name,for float literals
 def gen_const():
     global const
     const+=1
     return "_const%d"%const
 
+''' 
+    Function to backpatch the bp_labels with corresponding labels, 
+    store the symbol table info and extract the final Intermediate 
+    Representation.
+'''
 def get_IR():
     IR = ""
     patches = {}
@@ -47,8 +53,8 @@ def get_IR():
     
     return IR.split("\n"), vars
 
-# Begin Macros
-def asmd(a,b,c,op,oper,sym):
+# Begin: Macros for different operations #
+def asmd(a,b,c,op,oper,sym): # Add, Sub, Mul and Div
     if op == sym:
         if sym=="/":
             return "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tlw $t1, %s\n\tmtc1 $t1, $f4\n\tcvt.d.w $f4, $f4\n\t%s.d $f6, $f2, $f4\n\tsdc1 $f6, %s\n"%(b.name,c.name,oper, a.name)
@@ -64,13 +70,13 @@ def asmd(a,b,c,op,oper,sym):
     code += "%s.d $f6, $f2, $f4\n\tsdc1 $f6, %s\n"%(oper, a.name)
     return code
 
-def uminus(a,b,op):
+def uminus(a,b,op): # Unary -
     if op == "-":
         return "lw $t0, %s\n\tsub $t1, $zero, $t0\n\tsw $t1, %s\n"%(b.name,a.name)
     else:
         return "ldc1 $f0, _zero\n\tldc1 $f2, %s\n\tsub.d $f4, $f0, $f2\n\tsdc1 $f4, %s\n"%(b.name,a.name)
 
-def if_(a,b,label,op,sym):
+def if_(a,b,label,op,sym): # If rules with all supported relops
     code = ""
     if op==sym:
         return "lw $t0, %s\n\tlw $t1, %s\n\tb%s $t0, $t1, %s\n"%(a.name, b.name, sym, label)
@@ -85,7 +91,7 @@ def if_(a,b,label,op,sym):
     code += "sub.d $f6, $f2, $f4\n\tldc1 $f0, _zero\n\tc.%s.d $f6, $f0\n\tbc1t %s\n"%(sym,label)
     return code
 
-def printt(a,op):
+def printt(a,op): # Printing: int, float and string
     if op == "f":
         return "ldc1 $f12, %s\n\tli $v0, 3\n\tsyscall\n"%a
     elif op == "i":
@@ -93,7 +99,7 @@ def printt(a,op):
     else:
         return "la $a0, %s\n\tli $v0,4\n\tsyscall\n"%a
 
-def inputt(a,op):
+def inputt(a,op): # Input: int and float
     if op=="f":
         if "[" in a:
             return "lw $t0, %s\n\tli $v0, 7\n\tsyscall\n\tsdc1 $f0, %s($t0)\n"%(a[a.find("[")+1:a.find("]")], a[:a.find("[")])
@@ -105,33 +111,38 @@ def inputt(a,op):
         else:
             return "li $v0,5\n\tsyscall\n\tsw $v0, %s\n"%a
 
-printnl = lambda: "li $v0, 4\n\tla $a0, _newline\n\tsyscall\n"
-idiv = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-mod = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t0, $t1\n\tmfhi $t2\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-ixor = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\txor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-ior = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-iand = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tand $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name)
-# strassign = lambda a,b: "la $a0, %s\n\tsa $a0, %s\n"%(b.name, a.name)
-# assignstr = lambda a,b: "la $a0, %s\n\tsa $a0, %s\n"%(b, a.name)
-assignfi = lambda a,b: "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b.name,a.name)
-assignii = lambda a,b: "lw $t0, %s\n\tsw $t0, %s\n"%(b.name, a.name)
-assignff = lambda a,b: loadf(a,b.name)
+printnl = lambda: "li $v0, 4\n\tla $a0, _newline\n\tsyscall\n" # Printing newline
+idiv = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name) # Integer Division
+mod = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tdiv $t0, $t1\n\tmfhi $t2\n\tsw $t2, %s\n"%(b.name,c.name,a.name) # Modulo
+ixor = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\txor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name) # Bitwise XOR
+ior = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tor $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name) # Bitwise OR
+iand = lambda a,b,c: "lw $t0, %s\n\tlw $t1, %s\n\tand $t2, $t0, $t1\n\tsw $t2, %s\n"%(b.name,c.name,a.name) # Bitwise AND
+assignfi = lambda a,b: "lw $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b.name,a.name) # Assign: float = int
+assignii = lambda a,b: "lw $t0, %s\n\tsw $t0, %s\n"%(b.name, a.name) # Assign: int = int
+assignff = lambda a,b: loadf(a,b.name) #Assign: float = float
+# Similar assignments to and from arrays
 arrassignfi = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s\n\tmtc1 $t1, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s($t0)\n"%(ind,b.name,a.name)
 arrassignii = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s\n\tsw $t1, %s($t0)\n"%(ind, b.name, a.name)
 arrassignff = lambda a,ind,b: "lw $t0, %s\n\tldc1 $f2, %s\n\tsdc1 $f2, %s($t0)\n"%(b,a.name)
 assignfiarr = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s($t0)\n\tmtc1 $t1, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(ind, b.name,a.name)
 assigniiarr = lambda a,ind,b: "lw $t0, %s\n\tlw $t1, %s($t0)\n\tsw $t1, %s\n"%(ind, b.name, a.name)
 assignffarr = lambda a,ind,b: "lw $t0, %s\n\tldc1 $f2, %s($t0)\n\tsdc1 $f2, %s\n"%(ind, b.name, a.name)
-loadif = lambda a,b: "li $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b,a.name)
-loadf = lambda a,b: "ldc1 $f2, %s\n\tsdc1 $f2, %s\n"%(b,a.name)
-loadi = lambda a,b: "li $t0, %s\n\tsw $t0, %s\n"%(b,a.name)
+# Load Immediate:
+loadif = lambda a,b: "li $t0, %s\n\tmtc1 $t0, $f2\n\tcvt.d.w $f2, $f2\n\tsdc1 $f2, %s\n"%(b,a.name) # float = int
+loadf = lambda a,b: "ldc1 $f2, %s\n\tsdc1 $f2, %s\n"%(b,a.name) # float
+loadi = lambda a,b: "li $t0, %s\n\tsw $t0, %s\n"%(b,a.name) # int
 
 #End Macros
 
+'''
+    Main function:
+    Generates MIPS code from Intermediate Representation
+'''
 def gen_asm(IR, vars):
     data = '.data\n\t_zero: .double 0.0\n\t_incr: .word 1\n\t_newline: .asciiz "\\n"\n\t.align 6\n'
     text = ".text\n.globl main\n  main:"
     done = {"_incr"}
+
     for line in IR:
         atr = line.split()
         if len(atr)>=3 and  ("\"" in atr[2]) and ("s=s" in atr[1]):
@@ -180,8 +191,6 @@ def gen_asm(IR, vars):
                     else:
                         text += "\t" + assigniiarr(vars[atr[0]], ind, vars[arr])
                 else:
-                    # if "s" in atr[1]:
-                    #     text += "\t" + strassign(vars[atr[0]], vars[atr[2]])
                     if atr[1][-1]=="f":
                         text += "\t" + assignfi(vars[atr[0]], vars[atr[2]])
                     elif atr[1][0]=="f":
@@ -222,6 +231,7 @@ def gen_asm(IR, vars):
     text += "\tli $v0, 10\n\tsyscall\n"
     return data + "\n" + text
 
+# Utility function to write MIPS code to a file 
 def dump_file(code, name):
     with open(name+".asm","w") as f:
         f.write(code)

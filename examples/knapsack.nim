@@ -1,3 +1,9 @@
+# Example from Geeksforgeeks
+# Items = 3
+# Capacity = 50
+# Values: 60, 100, 120
+# Weights: 10, 20, 30
+
 var dp: array[1000, array[1000,int]]
 var val: array[1000,int]
 var wts: array[1000,int]

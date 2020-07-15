@@ -1,11 +1,17 @@
+# https://codeforces.com/contest/1199/problem/A
+# Sample Inputs and Outputs
 # 10 2 2
 # 10 9 6 7 8 3 2 1 4 5
+# Ans: 3
 
 # 10 2 3
 # 10 9 6 7 8 3 2 1 4 5
+# Ans: 8
 
 # 5 5 5
 # 100000 10000 1000 100 10
+# Ans: 5
+
 var 
     n: int
     x: int
