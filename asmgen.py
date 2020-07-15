@@ -68,7 +68,7 @@ def uminus(a,b,op):
     if op == "-":
         return "lw $t0, %s\n\tsub $t1, $zero, $t0\n\tsw $t1, %s\n"%(b.name,a.name)
     else:
-        return "ldc1 $f0, _zero\n\tldc1 $f2, %s\n\tsub $f4, $f0, $f2\n\tsdc1 $f4, %s\n"%(b.name,a.name)
+        return "ldc1 $f0, _zero\n\tldc1 $f2, %s\n\tsub.d $f4, $f0, $f2\n\tsdc1 $f4, %s\n"%(b.name,a.name)
 
 def if_(a,b,label,op,sym):
     code = ""
@@ -189,7 +189,7 @@ def gen_asm(IR, vars):
                     else:
                         text += "\t" + assignii(vars[atr[0]], vars[atr[2]])
         elif len(atr)==4 and ("=" in atr[1]):
-            text += "\t" + uminus(atr[0], atr[3],atr[2])
+            text += "\t" + uminus(vars[atr[0]], vars[atr[3]],atr[2])
         elif len(atr)==5 and ("=" in atr[1]):
             if "+" in atr[3]:
                 text += "\t"+ asmd(vars[atr[0]], vars[atr[2]], vars[atr[4]], atr[3],"add","+")

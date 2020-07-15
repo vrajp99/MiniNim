@@ -60,6 +60,10 @@ CHARLIT \'.\'
 FLOATLIT {digit}+"."{digit}+
 BOOLLIT true|false
 
+ELSEINDENT "else "|"else:"
+ELIFINDENT "elif "|"elif("
+LINECOMMENT "#"[^\n]*
+
 %%
     int indent_caller = normal;
 
@@ -74,6 +78,8 @@ BOOLLIT true|false
                 }
 <indent>\n      { g_current_line_indent = 0; 
                 /* ignoring blank line */ }
+
+<indent>{LINECOMMENT} {}
 <indent><<EOF>> {   
                     if(indent_stack->value != 0) {
                         pop(&indent_stack);
@@ -93,6 +99,37 @@ BOOLLIT true|false
                     }
                 }
 
+<indent>{ELSEINDENT}|{ELIFINDENT} {
+                    if(!g_is_fake_outdent_symbol) {
+                        int match_len = strlen(yytext);
+                        for(int i=match_len-1;i>=0;i--){
+                            unput(yytext[i]);
+                        }
+                    }
+                    set_yycolumn(yycolumn-1);
+                    g_is_fake_outdent_symbol = 0;
+                    if(g_current_line_indent > indent_stack->value) {
+                        push(&indent_stack,g_current_line_indent);
+                        BEGIN(indent_caller);
+                        PRINTF("INDG\n");
+                        return INDG;
+                    } else if(g_current_line_indent < indent_stack->value) {
+                        pop(&indent_stack);
+                        if(g_current_line_indent != indent_stack->value) {
+                            for(size_t i = 0 ; i < g_current_line_indent ; ++i) {
+                                unput(' ');
+                            }
+                            unput('\n');
+                            unput('.');
+                            g_is_fake_outdent_symbol = 1;
+                        } else {
+                        }
+                        PRINTF("DED\n");
+                        return DED;
+                    } else {
+                        BEGIN(indent_caller);
+                    }
+               }
 <indent>.       {   
                     if(!g_is_fake_outdent_symbol) {
                         unput(*yytext);
@@ -134,11 +171,13 @@ BOOLLIT true|false
 <normal>\n    {
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
+<normal>{LINECOMMENT} {}
+
 <normal><<EOF>> {
                 g_current_line_indent = 0; indent_caller = YY_START; BEGIN(indent); }
 
 <normal>{OP}        {   
-                     PRINTF("OP\n");
+                     PRINTF("OP<%s>\n", yytext);
                      if(strcmp("$",yytext)==0){return '$';}
                      else if(strcmp("*",yytext)==0) 
                         return '*';
@@ -164,7 +203,7 @@ BOOLLIT true|false
                      else if(strcmp("*=",yytext)==0){return MEQ;}
                      else if(strcmp("=",yytext)==0){return '=';}
                     }
-<normal>{KEYW}      {PRINTF("KeyW\n");if(strcmp("break",yytext)==0){return BREAK;}
+<normal>{KEYW}      {PRINTF("KeyW<%s>\n", yytext);if(strcmp("break",yytext)==0){return BREAK;}
                      else if(strcmp("continue",yytext)==0){return CONTINUE;}
                      else if(strcmp("elif",yytext)==0){return ELIF;}
                      else if(strcmp("else",yytext)==0){return ELSE;}
@@ -184,15 +223,15 @@ BOOLLIT true|false
                      else if(strcmp("array",yytext)==0){return ARRAY;}
                     }
 
-<normal>{INTLIT}      {sscanf(yytext,"%d",&yylval.integer);PRINTF("Int\n");return INTLIT;}
+<normal>{INTLIT}      {sscanf(yytext,"%d",&yylval.integer);PRINTF("Int<%s>\n", yytext);return INTLIT;}
 
-<normal>{FLOATLIT}    {sscanf(yytext,"%lf",&yylval.floater);PRINTF("Float\n");return FLOATLIT;}
+<normal>{FLOATLIT}    {sscanf(yytext,"%lf",&yylval.floater);PRINTF("Float<%s>\n", yytext);return FLOATLIT;}
 
-<normal>{STRLIT}      {yylval.str = strdup(yytext);PRINTF("String\n");return STRLIT;}
+<normal>{STRLIT}      {yylval.str = strdup(yytext);PRINTF("String<%s>\n", yytext);return STRLIT;}
 
 <normal>{BOOLLIT}     {if (yytext[0]=='t') {yylval.integer = 1;} else {yylval.integer = 0;} PRINTF("Bool\n");return BOOLLIT;}
 
-<normal>{IDENT}       {yylval.str = strdup(yytext);PRINTF("IDENT\n");return IDENT;}
+<normal>{IDENT}       {yylval.str = strdup(yytext);PRINTF("IDENT<%s>\n", yytext);return IDENT;}
 
 <normal>[ ]+          /* eat up whitespace */
 
