@@ -192,6 +192,8 @@ sExpr: sExpr "xor" sExpr        {
                                     if (($1.type == BOOL_TYPE) || ($3.type == BOOL_TYPE)){
                                         char *t = new_temp();
                                         puttemp(t,INT_TYPE);
+                                        char *t1 = new_temp();
+                                        puttemp(t1,INT_TYPE);
                                         char *label = new_label();
                                         char *B1_truelabel = new_label();
                                         char *B1_falselabel = new_label();
@@ -210,7 +212,10 @@ sExpr: sExpr "xor" sExpr        {
                                         $$.type = BOOL_TYPE;
                                         $$.truelist = create_bp(bptlabel);
                                         $$.falselist = create_bp(bpflabel);
-                                        $$.code = scc(31, t, " = 0\n", $1.code, putl(B1_truelabel), t, " = 1\ngoto c", label, "\n", putl(B1_falselabel), t, " = 0\n", putl(label), $3.code, putl(B2_truelabel), "if ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n", putl(B2_falselabel), "ifFalse ", t, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n");
+                                        $$.code = scc(37, t, " = 0\n",t1," = 1\n", $1.code, putl(B1_truelabel), t, " = 1\ngoto ", label, 
+                                                        "\n", putl(B1_falselabel), t, " = 0\n", putl(label), $3.code, putl(B2_truelabel), 
+                                                        "if ", t, " eq ", t1, " goto ", bpflabel, "\n", "goto ", bptlabel, "\n", putl(B2_falselabel), 
+                                                        "if ", t, " eq ", t1, " goto ", bptlabel, "\n", "goto ", bpflabel, "\n");
                                     } else if (($1.type == INT_TYPE) || ($3.type == INT_TYPE)){
                                         $$.truelist = NULL;
                                         $$.falselist = NULL;

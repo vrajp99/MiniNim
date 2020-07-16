@@ -166,10 +166,12 @@ def gen_asm(IR, vars):
                     cons = gen_const()
                     data += "\t" + cons + ": .double " + atr[2] + "\n"
                     text += "\t" + loadf(v1, cons)
-                    data += "\t" + atr[0] + ": .space 8\n"
+                    if atr[0] not in done:
+                        data += "\t" + atr[0] + ": .space 8\n"
                 else:
                     text += "\t" + loadi(v1, atr[2])
-                    data += "\t" + atr[0] + ": .space 4\n\t.align 4\n"
+                    if atr[0] not in done:
+                        data += "\t" + atr[0] + ": .space 4\n\t.align 4\n"
                 done.add(atr[0])
             else:
                 if "[" in atr[0]:
